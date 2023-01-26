@@ -12,6 +12,7 @@ with open("test_set_user_ids.txt", "r") as f:
 # Load data from secure Veracrypt partition
 raw_full_trip_gdf = gp.read_file("W:/Master-Thesis-Repository/data/freemove_dlr_data/raw_full_trip.geojson")
 raw_points_gdf = gp.read_file("W:/Master-Thesis-Repository/data/freemove_dlr_data/od_points.geojson")
+tesselation_gdf = gp.read_file("W:/Master-Thesis-Repository/data/freemove_dlr_data/tessellation.geojson")
 
 # remove ids from test set
 raw_full_trip_gdf = raw_full_trip_gdf[raw_full_trip_gdf['PERSON_ID'].isin(test_ids) == False]
@@ -46,9 +47,12 @@ raw_trip_ep_gdf['LONG'], raw_trip_ep_gdf['LAT']  = raw_trip_ep_gdf['TRIP_EP'].ap
 raw_trip_ep_gdf = gp.GeoDataFrame(raw_trip_ep_gdf, geometry="TRIP_EP", crs = 4326)
 raw_trip_sp_gdf = gp.GeoDataFrame(raw_trip_sp_gdf, geometry="TRIP_SP", crs = 4326)
 
+# Project all GDFs to CRS 3035
+raw_trip_ep_gdf = raw_trip_ep_gdf.to_crs(3035)
+raw_trip_sp_gdf = raw_trip_sp_gdf.to_crs(3035)
+raw_full_trip_gdf = raw_full_trip_gdf.to_crs(3035)
+raw_points_gdf = raw_points_gdf.to_crs(3035)
+tesselation_gdf = tesselation_gdf.to_crs(3035)
+
 # drop SP and EP from trip file
 raw_full_trip_gdf = raw_full_trip_gdf.drop(['TRIP_SP', 'TRIP_EP'], axis=1)
-
-
-def leftJoinHLId(gdf):
-    return gp.sjoin(gp.GeoDataFrame(gdf, geometry="TRIP_SP"), HL_table, how="left").drop('index_right', axis=1)
