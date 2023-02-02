@@ -54,5 +54,5 @@ raw_full_trip_gdf = raw_full_trip_gdf.to_crs(3035)
 raw_points_gdf = raw_points_gdf.to_crs(3035)
 tesselation_gdf = tesselation_gdf.to_crs(3035)
 
-# drop SP and EP from trip file
+# drop SP and EP columns from trip file
 raw_full_trip_gdf = raw_full_trip_gdf.drop(['TRIP_SP', 'TRIP_EP'], axis=1)
