@@ -1,2 +1,6 @@
 data/*
 env/*
+constrained_clustering/*
+traj-dist/*
+.vscode/*
+__pycache__/*
