@@ -65,3 +65,18 @@ def read_all_users(folder):
         df['user'] = int(sf)
         dfs.append(df)
     return pd.concat(dfs)
+
+def read_all_users_to_individual_files_for_trajDBSCAN(folder, output_folder):
+    """This function reads all users and saves them to individual files for trajDBSCAN.
+
+    Args:
+        folder (_type_): folder of the geolife dataset
+        output_folder (_type_): folder to save the individual files
+    """
+    subfolders = os.listdir(folder)
+    for i, sf in enumerate(subfolders):
+        print('[%d/%d] processing user %s' % (i + 1, len(subfolders), sf))
+        df = read_user(os.path.join(folder,sf))
+        df['user'] = int(sf)
+        df = df[['lat', 'lon', 'time']]
+        df.to_csv(os.path.join(output_folder, sf + '.txt'), index=False)
