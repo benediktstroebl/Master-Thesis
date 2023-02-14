@@ -43,7 +43,7 @@ geolife_tesselation_gdf = gp.read_file("W:/Master-Thesis-Repository/data/freemov
 
 
 # Replace traj_id with increasing integer values
-geolife_raw_gdf['traj_id'] = str(range(0, len(geolife_raw_gdf)))
+geolife_raw_gdf['traj_id'] = range(0, len(geolife_raw_gdf))
 
 
 # In[84]:
