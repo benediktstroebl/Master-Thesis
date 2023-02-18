@@ -29,14 +29,14 @@ geolife_raw_gdf = pd.concat(li, axis=0, ignore_index=True)
 # In[82]:
 
 
-# Load geolife data with EPSG:4326
-geolife_raw_gdf = gp.GeoDataFrame(geolife_raw_gdf, geometry=gp.GeoSeries.from_wkt(geolife_raw_gdf['geometry']), crs='EPSG:4326')
+# Load geolife data with EPSG:32650 (China)
+geolife_raw_gdf = gp.GeoDataFrame(geolife_raw_gdf, geometry=gp.GeoSeries.from_wkt(geolife_raw_gdf['geometry']), crs='EPSG:32650')
 
 
 # In[ ]:
 
-# Load geolife tesselated data with EPSG:4326
-geolife_tesselation_gdf = gp.read_file("W:/Master-Thesis-Repository/data/freemove_dlr_data/tessellation_geolife.geojson", crs='EPSG:4326', geometry='geometry')
+# Load geolife tesselated data with EPSG:32650 (China)
+geolife_tesselation_gdf = gp.read_file("W:/Master-Thesis-Repository/data/freemove_dlr_data/tessellation_geolife.geojson", crs='EPSG:32650', geometry='geometry')
 
 
 # In[83]:
