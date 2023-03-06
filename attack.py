@@ -10,15 +10,24 @@ from sklearn import metrics
 from scipy.optimize import linear_sum_assignment
 import tslearn.metrics
 import matplotlib.pyplot as plt
-import sys, os
 
-# Disable print
-def blockPrint():
-    sys.stdout = open(os.devnull, 'w')
+# Parameters
+LCSS_EPS = 200
+LCSS_FLIP = True
 
-# Restore print
-def enablePrint():
-    sys.stdout = sys.__stdout__
+CHAINING_INFLOW_HR_DIFF_THRESHOLD = 4
+CHAINING_HR_DIFF_THRESHOLD = 8
+
+HL_SP_START_TIME = '6:00'
+HL_SP_END_TIME = '10:00'
+HL_EP_START_TIME = '18:00'
+HL_EP_END_TIME = '0:00'
+
+RANDOMIZED_SIMULTANEOUS_SEARCH_ITERATIONS = 200
+
+SIM_THRESH_FOR_NO_MATCH_TRIPS = 0.3
+
+
 
 def plot_hour_of_day_distribution(gdf):
     """Plot the distribution of trips across hour of the day.
@@ -42,6 +51,7 @@ def getGroundTruth(full_trip_gdf):
     ground_truth = df.sort_values('TRIP_ID').ID.to_list()
     return ground_truth
 
+
 def evaluate(clustering, full_trip_gdf):
     # Get ground truth labels
     ground_truth = getGroundTruth(full_trip_gdf)
@@ -62,7 +72,8 @@ def evaluate(clustering, full_trip_gdf):
     print(f"NMI: {metrics.normalized_mutual_info_score(ground_truth, clustering):.3f}")
     print(f"AMI: {metrics.adjusted_mutual_info_score(ground_truth, clustering):.3f}")
 
-def LCSS(traj1_linestr, traj2_linestr, eps=200, flip=True):
+
+def LCSS(traj1_linestr, traj2_linestr, eps=LCSS_EPS, flip=LCSS_FLIP):
     """This function takes in two GeoSeries and takes the top entry linestring. It then calculates the Least Common Sub-Sequence metric for these two and returns the value.
 
     Args:
@@ -90,7 +101,7 @@ def LCSS(traj1_linestr, traj2_linestr, eps=200, flip=True):
         return tslearn.metrics.lcss(s1, s2, eps=eps)
 
 
-def cdist(traj_linestrings, eps=200):
+def cdist(traj_linestrings, eps=LCSS_EPS):
 
     assert isinstance(traj_linestrings, gp.GeoSeries), f"traj_linestrings is of type {type(traj_linestrings)}, need to be GeoSeries"
 
@@ -103,6 +114,7 @@ def cdist(traj_linestrings, eps=200):
         for j in range(len_traj_list):
             traj_list_2_j = traj_linestrings[j]
             M[i, j] = LCSS(traj_list_1_i, traj_list_2_j,eps)
+
 
 def match_boundary_points_with_tessellation(raw_trip_sp_gdf, raw_trip_ep_gdf, tesselation_gdf):
     """This function matches the boundary points of the raw trips with the tesselation. 
@@ -151,7 +163,8 @@ def extract_trips_that_start_end_in_tessellation(raw_full_trip_gdf, raw_trip_sp_
 
     return full_trip_gdf, trip_sp_gdf, trip_ep_gdf, gdf_sp, gdf_ep
 
-def build_trip_chain_mapping(gdf_sp, gdf_ep, INFLOW_HR_DIFF_THRESHOLD=4, HR_DIFF_THRESHOLD=8):
+
+def build_trip_chain_mapping(gdf_sp, gdf_ep, INFLOW_HR_DIFF_THRESHOLD=CHAINING_INFLOW_HR_DIFF_THRESHOLD, HR_DIFF_THRESHOLD=CHAINING_HR_DIFF_THRESHOLD):
     """This function returns a list of trip chains that are continued trips that happened subsequent to and from same tile within a given time threshold.
 
     Args:
@@ -259,6 +272,7 @@ def getTripChain(trip_id, mapping_cont_trips, chain=[]):
         
     return chain
 
+
 def merge_trips_from_matching(gdf_sp, mapping_cont_trips, full_trip_gdf):
     """This function merges trips that are chained together from the matching done in build_trip_chain_mapping().
 
@@ -271,7 +285,7 @@ def merge_trips_from_matching(gdf_sp, mapping_cont_trips, full_trip_gdf):
         _type_: GeoDataFrame of merged trips.
     """
     # Get trip chain for each trip (Start Point)
-    print("Building trip chains...")
+    print("\nBuilding trip chains...")
     trip_chains = [getTripChain(trip, mapping_cont_trips, chain=[]) for trip in tqdm(gdf_sp.TRIP_ID)]
     print("Done.")
 
@@ -283,7 +297,7 @@ def merge_trips_from_matching(gdf_sp, mapping_cont_trips, full_trip_gdf):
 
     covered_trips = []
     merged_trips_gdf = []
-    print("Merging trips...")
+    print("\nMerging trips...")
     for chain in tqdm(trip_chains, total=len(trip_chains)):
         # Check if any of the trips in the current chain has already been merged as part of another chain
         # Since we start with the longest chain and iterate through descending sorted list, we only retain the complete chains
@@ -393,16 +407,16 @@ def build_clustering_after_concatenation(full_trips_concat_gdf, trip_concat_dict
                 clustering_concat[getIndexInList(t, full_trip_gdf)] = index
 
     clustering_concat = list(dict(sorted(clustering_concat.items())).values())
-
+    
     print(f"Number of unique clusters: {len(set(clustering_concat))}")
 
     return clustering_concat
 
 
-def build_hl_from_start_points(gdf_sp):
+def build_hl_from_start_points(gdf_sp, HL_SP_START_TIME=HL_SP_START_TIME, HL_SP_END_TIME=HL_SP_END_TIME):
     # Generate home locations (HL) from SPs
     gdf_sp.index=pd.to_datetime(gdf_sp.TRIP_START)
-    gdf_sp['hl'] = gdf_sp['TRIP_START'].apply(lambda x: 1 if x in gdf_sp.between_time('6:00', '10:00').TRIP_START else 0).astype(object)
+    gdf_sp['hl'] = gdf_sp['TRIP_START'].apply(lambda x: 1 if x in gdf_sp.between_time(HL_SP_START_TIME, HL_SP_END_TIME).TRIP_START else 0).astype(object)
     gdf_sp.reset_index(inplace=True, drop=True)
 
     # Extract only those cells that are HL
@@ -433,10 +447,10 @@ def build_hl_from_start_points(gdf_sp):
     return gdf_hl_combined_sp
 
 
-def build_hl_from_end_points(gdf_ep):
+def build_hl_from_end_points(gdf_ep, HL_EP_START_TIME=HL_EP_START_TIME, HL_EP_END_TIME=HL_EP_END_TIME):
     # Generate home locations (HL) from EPs
     gdf_ep.index=pd.to_datetime(gdf_ep.TRIP_END)
-    gdf_ep['hl'] = gdf_ep['TRIP_END'].apply(lambda x: 1 if x in gdf_ep.between_time('18:00', '00:00').TRIP_END else 0).astype(object)
+    gdf_ep['hl'] = gdf_ep['TRIP_END'].apply(lambda x: 1 if x in gdf_ep.between_time(HL_EP_START_TIME, HL_EP_END_TIME).TRIP_END else 0).astype(object)
     gdf_ep.reset_index(inplace=True, drop=True)
 
     # Extract only those cells that are HL
@@ -466,6 +480,7 @@ def build_hl_from_end_points(gdf_ep):
 
     return gdf_hl_combined_ep
 
+
 def concatenate_hl(gdf_hl_combined_sp, gdf_hl_combined_ep):
     gp_combined = pd.concat([gdf_hl_combined_ep, gdf_hl_combined_sp])
 
@@ -492,8 +507,9 @@ def concatenate_hl(gdf_hl_combined_sp, gdf_hl_combined_ep):
     
     gp_combined = gp_combined.astype(convert_dict)
 
-    # print number of unique person IDs per HL count
-    print('Count unique PERSON_IDs per HL: ',gp_combined.astype({'geometry':'string'}).groupby(['geometry'])[['PERSON_ID']].nunique().value_counts())
+    # Plot number of unique person IDs per HL count
+    gp_combined.astype({'geometry':'string'}).groupby(['geometry'])[['PERSON_ID']].nunique().value_counts().plot(kind='bar', title='Number of unique person IDs per HL count', xlabel='HL count', ylabel='Number of unique person IDs')
+
 
     # Number of users for which at least one HL was identified
     print('Number of users for which at least on Home Location has been identified: ', gp_combined.PERSON_ID.unique().size)
@@ -565,7 +581,6 @@ def match_trips_to_HL(gp_combined, HL_table, trip_sp_gdf_concat, trip_ep_gdf_con
     unmatched_trips = full_trips_concat_gdf.query('TRIP_ID_FIRST in @unmatched_sp_t_ids and TRIP_ID_LAST in @unmatched_ep_t_ids')[['TRIP_ID']].reset_index(drop=True)
     unmatched_trips['HL_ID'] = None # Get same format as HL_table_se_concat
 
-    #HL_table_se_concat['HL_ID'] = HL_table_se_concat['HL_ID_x'].combine_first(HL_table_se_concat['HL_ID_y'])
     print(f"Number of trips that match different HL tiles with their SP and EP: {double_assigned_trips.TRIP_ID.nunique()}")
 
     return HL_table_se_concat, unmatched_trips, double_assigned_trips, nr_unmatched
@@ -646,7 +661,7 @@ def assign_double_matched_trips_to_unique_hl(HL_table_se_concat, full_trips_conc
             result_dict[t_id][hl_id].append(score)
         return result_dict
 
-    parallel_scores = Parallel(n_jobs=-2, verbose=10)(delayed(compute_lcss_scores)(double_assigned_trip) for index, double_assigned_trip in double_assigned_trips.iterrows())
+    parallel_scores = Parallel(n_jobs=4, verbose=0)(delayed(compute_lcss_scores)(double_assigned_trip) for index, double_assigned_trip in double_assigned_trips.iterrows())
 
     # Flatten the list of dicts from parallel processing
     lcss_scores = {}
@@ -709,7 +724,7 @@ def getTripOverlaps(gdf):
 
         return overlap_dict
 
-    overlap_dicts = Parallel(n_jobs=-2, verbose=10)(delayed(getOverlaps)(trip_x) for index_x, trip_x in gdf.iterrows())
+    overlap_dicts = Parallel(n_jobs=4, verbose=0)(delayed(getOverlaps)(trip_x) for index_x, trip_x in gdf.iterrows())
 
     return {k: v for d in overlap_dicts for k, v in d.items()}
 
@@ -723,7 +738,8 @@ def getOverlappingTrips(traj_id_list, full_trips_concat_gdf_overlap_dict):
     overlapping_trips = [item for sublist in [full_trips_concat_gdf_overlap_dict[t] for t in traj_id_list] for item in sublist] # we first get a list of lists and then flatten it
     return overlapping_trips
 
-def findLargestNonSimultaneousSubset(traj_id_list, full_trips_concat_gdf_overlap_dict, RANDOMIZED_SEARCH_THRESHOLD=30, RANDOMIZED_SEARCH_ITERATIONS=1000):
+
+def findLargestNonSimultaneousSubset(traj_id_list, full_trips_concat_gdf_overlap_dict, RANDOMIZED_SEARCH_THRESHOLD=30, RANDOMIZED_SEARCH_ITERATIONS=RANDOMIZED_SIMULTANEOUS_SEARCH_ITERATIONS):
     """This function finds the largest subset of trajectories that are not simultaneous. It uses a determinitic algorithm if the length of the trajectory ID list is smaller than a threshold and a randomized algorithm if the length is larger than the given threshold.
 
     Args:
@@ -771,14 +787,14 @@ def findLargestNonSimultaneousSubset(traj_id_list, full_trips_concat_gdf_overlap
             subsets.append(subset)
             return max(subsets, key=len)
         
-        # We run the randomized subset search 100 times and return the longest subset
+        # We run the randomized subset search n times and return the longest subset
         print(f'Running randomized subset search for {RANDOMIZED_SEARCH_ITERATIONS} iterations with {len(traj_id_list)} trajectories...')
-        result = Parallel(n_jobs=-2, verbose=10)(delayed(randomized_subset_search)(traj_id_list) for _ in range(RANDOMIZED_SEARCH_ITERATIONS))
+        result = Parallel(n_jobs=4, verbose=0)(delayed(randomized_subset_search)(traj_id_list) for _ in range(RANDOMIZED_SEARCH_ITERATIONS))
         print('Done. Length of longest subset: ', len(max(result, key=len)))
         return max(result, key=len)
 
 
-def build_clustering_after_HL_assignment(HL_table_trips_concat, full_trip_gdf, trip_concat_dict, full_trips_concat_gdf_overlap_dict, RANDOMIZED_SEARCH_THRESHOLD=30, RANDOMIZED_SEARCH_ITERATIONS=1000):
+def build_clustering_after_HL_assignment(HL_table_trips_concat, full_trip_gdf, trip_concat_dict, full_trips_concat_gdf_overlap_dict):
     # This creates the array with clustering IDs after the HL assignment step
     clustering_after_HL = {}
     HL_table_dict = (HL_table_trips_concat.groupby('HL_ID')
@@ -791,7 +807,7 @@ def build_clustering_after_HL_assignment(HL_table_trips_concat, full_trip_gdf, t
             continue
 
         # find the largest subset of trips that are not simultaneous
-        non_simultaneous_subset = findLargestNonSimultaneousSubset(HL_table_dict[HL], full_trips_concat_gdf_overlap_dict, RANDOMIZED_SEARCH_THRESHOLD, RANDOMIZED_SEARCH_ITERATIONS)
+        non_simultaneous_subset = findLargestNonSimultaneousSubset(HL_table_dict[HL], full_trips_concat_gdf_overlap_dict)
 
         # assign hl_id -1 to all trips that are not part of the largest subset
         for trip in HL_table_dict[HL]:
@@ -819,8 +835,7 @@ def build_clustering_after_HL_assignment(HL_table_trips_concat, full_trip_gdf, t
     return clustering_after_HL, HL_table_dict
 
 
-
-def assign_trips_without_match(clustering_after_HL, HL_table_dict, full_trips_concat_gdf, full_trips_concat_gdf_overlap_dict, full_trip_gdf, trip_concat_dict, SIM_THRESH_FOR_NO_MATCH=0.25):
+def assign_trips_without_match(clustering_after_HL, HL_table_dict, full_trips_concat_gdf, full_trips_concat_gdf_overlap_dict, full_trip_gdf, trip_concat_dict, SIM_THRESH_FOR_NO_MATCH=SIM_THRESH_FOR_NO_MATCH_TRIPS):
     # This compares all trips that were not assigned to any HL_ID with all trips that were assigned to a HL_ID and assigns the clustering ID of the trip with the highest LCSS score above a certain threshold
     new_cluster_ids = []
     clustering_after_HL = clustering_after_HL.copy()
@@ -937,6 +952,103 @@ def assign_trips_without_match(clustering_after_HL, HL_table_dict, full_trips_co
     return clustering_after_HL
 
 
+def run_full_attack(raw_full_trip_gdf, raw_trip_sp_gdf, raw_trip_ep_gdf, tesselation_gdf):
+    plot_hour_of_day_distribution(raw_full_trip_gdf)
+
+    # Merge Start Points (SP) and End Points (EP) with Tessellation
+    print("\nMatching start and end points with tessellation...")
+    gdf_sp, gdf_ep = match_boundary_points_with_tessellation(raw_trip_sp_gdf, raw_trip_ep_gdf, tesselation_gdf)
+    print("Done.")
+
+    # Extract Full Trips that Start and End within Tessellation Area
+    print("\nExtracting trips that start and end within tessellation area...")
+    full_trip_gdf, trip_sp_gdf, trip_ep_gdf, gdf_sp, gdf_ep = extract_trips_that_start_end_in_tessellation(raw_full_trip_gdf, raw_trip_sp_gdf, raw_trip_ep_gdf, gdf_sp, gdf_ep)
+    print("Done.")
+
+    # Build mapping of trip chains
+    print('\nBuilding mapping of trip chains...')
+    mapping_cont_trips = build_trip_chain_mapping(gdf_sp, gdf_ep)
+    print('Done.')
+
+    # Evaluate Trip Chaining
+    print('\nEvaluating trip chaining...')
+    evaluate_trip_chaining(mapping_cont_trips, full_trip_gdf)
+    print('Done.')
+
+    # Concatenate Trips
+    full_trips_concat_gdf, trip_concat_dict = merge_trips_from_matching(gdf_sp, mapping_cont_trips, full_trip_gdf)
+
+    # Extract data for concatenated trips
+    print('\nExtracting data for concatenated trips...')
+    gdf_sp_concat, trip_sp_gdf_concat, gdf_ep_concat, trip_ep_gdf_concat = extract_concatenated_trips(full_trips_concat_gdf, gdf_sp, trip_sp_gdf, gdf_ep, trip_ep_gdf)
+    print('Done.')
+
+    # Build Clustering after Concatenation step
+    print('\nBuilding clustering after concatenation...')
+    clustering_concat = build_clustering_after_concatenation(full_trips_concat_gdf, trip_concat_dict, full_trip_gdf)
+    print('Done.')
+
+    # Build Home Locations (HL)
+    # Build HL from Start Points
+    print('\nBuilding HL from start points...')
+    gdf_hl_combined_sp = build_hl_from_start_points(gdf_sp)
+    print('Done.')
+    # Build HL from End Points
+    print('\nBuilding HL from end points...')
+    gdf_hl_combined_ep = build_hl_from_end_points(gdf_ep)
+    print('Done.')
+    # Combine HL from Start Points and End Points
+    print('\nCombining HL from start points and end points...')
+    gp_combined, HL_table = concatenate_hl(gdf_hl_combined_sp, gdf_hl_combined_ep)
+    print('Done.')
+
+    print('\nMatching trips to HL...')
+    HL_table_se_concat, unmatched_trips, double_assigned_trips, nr_unmatched = match_trips_to_HL(gp_combined, HL_table, trip_sp_gdf_concat, trip_ep_gdf_concat, full_trips_concat_gdf)
+    print('Done.')
+
+    print('\nMatching double assigned trips to unique HL...')
+    HL_table_trips_concat = assign_double_matched_trips_to_unique_hl(HL_table_se_concat, full_trips_concat_gdf, unmatched_trips, double_assigned_trips, nr_unmatched)
+    print('Done.')
+    
+    # Get trajectories that happened during the same time
+    print('\nGetting trajectories that happened during the same time...')
+    full_trips_concat_gdf_overlap_dict = getTripOverlaps(full_trips_concat_gdf)
+    print('Done.')
+
+    # Build Clustering after HL matching step
+    print('\nBuilding clustering after HL matching step...')
+    clustering_after_HL, HL_table_dict = build_clustering_after_HL_assignment(HL_table_trips_concat, full_trip_gdf, trip_concat_dict, full_trips_concat_gdf_overlap_dict)
+    print('Done.')
+
+    # Evaluate clustering Results
+    print("\nClustering results after concatenation step:")
+    print(f"Number of unique clusters: {len(set(clustering_concat))}")
+    evaluate(clustering_concat, full_trip_gdf)
+    clustering_HL = list(dict(sorted(clustering_after_HL.items())).values())
+    print("\nClustering results after HL matching step:")
+    print(f"Number of unique clusters: {len(set(clustering_HL))}")
+    evaluate(clustering_HL, full_trip_gdf)
+
+    # Try to assign trips without match
+    print("\nAssigning trips without match...")
+    clustering_after_double_assign_HL = assign_trips_without_match(
+        clustering_after_HL, HL_table_dict, 
+        full_trips_concat_gdf, 
+        full_trips_concat_gdf_overlap_dict, 
+        full_trip_gdf, 
+        trip_concat_dict)
+    print('Done.')
+
+    # Evaluate clustering Results
+    print("\nClustering results after concatenation step:")
+    print(f"Number of unique clusters: {len(set(clustering_concat))}")
+    evaluate(clustering_concat, full_trip_gdf)
+    print("\nClustering results after HL matching step:")
+    print(f"Number of unique clusters: {len(set(list(dict(sorted(clustering_after_HL.items())).values())))}")
+    evaluate(list(dict(sorted(clustering_after_HL.items())).values()), full_trip_gdf)
+    print("\nClustering results after double assign HL step:")
+    print(f"Number of unique clusters: {len(set(list(dict(sorted(clustering_after_double_assign_HL.items())).values())))}")
+    evaluate(list(dict(sorted(clustering_after_double_assign_HL.items())).values()), full_trip_gdf)
 
 
 
