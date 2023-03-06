@@ -9,21 +9,31 @@ import random
 from sklearn import metrics
 from scipy.optimize import linear_sum_assignment
 import tslearn.metrics
+import matplotlib.pyplot as plt
+import sys, os
 
+# Disable print
+def blockPrint():
+    sys.stdout = open(os.devnull, 'w')
 
-def select_n_random_users_from_dataframes(n, raw_full_trip_gdf, raw_trip_sp_gdf, raw_trip_ep_gdf):
-    """Select n random users from the dataset.
+# Restore print
+def enablePrint():
+    sys.stdout = sys.__stdout__
+
+def plot_hour_of_day_distribution(gdf):
+    """Plot the distribution of trips across hour of the day.
 
     Args:
-        n (_type_): Number of users to select.
+        gdf (_type_): GeoDataFrame containing the trips.
     """
-    # Select n random users
-    users = np.random.choice(raw_full_trip_gdf['PERSON_ID'].unique(), n, replace=False)
-    # Filter dataframes
-    raw_full_trip_gdf = raw_full_trip_gdf[raw_full_trip_gdf['PERSON_ID'].isin(users)]
-    raw_trip_sp_gdf = raw_trip_sp_gdf[raw_trip_sp_gdf['PERSON_ID'].isin(users)]
-    raw_trip_ep_gdf = raw_trip_ep_gdf[raw_trip_ep_gdf['PERSON_ID'].isin(users)]
-    return raw_full_trip_gdf, raw_trip_sp_gdf, raw_trip_ep_gdf
+    # Plot the distribution of trips over the day
+    gdf['HOUR'] = pd.to_datetime(gdf['TRIP_START'], format='%Y-%m-%d %H:%M:%S').dt.hour
+    gdf['HOUR'].hist(bins=24, figsize=(10, 5), ec='black', alpha=0.5)
+    plt.title('Distribution of trips across the day')
+    plt.xlabel('Hour of the day')
+    plt.ylabel('Number of trips')
+    plt.show()
+
 
 def getGroundTruth(full_trip_gdf):
     # Get ground truth labels
@@ -52,7 +62,7 @@ def evaluate(clustering, full_trip_gdf):
     print(f"NMI: {metrics.normalized_mutual_info_score(ground_truth, clustering):.3f}")
     print(f"AMI: {metrics.adjusted_mutual_info_score(ground_truth, clustering):.3f}")
 
-def LCSS(traj1_linestr, traj2_linestr, eps=10):
+def LCSS(traj1_linestr, traj2_linestr, eps=200, flip=True):
     """This function takes in two GeoSeries and takes the top entry linestring. It then calculates the Least Common Sub-Sequence metric for these two and returns the value.
 
     Args:
@@ -67,11 +77,32 @@ def LCSS(traj1_linestr, traj2_linestr, eps=10):
     assert isinstance(traj2_linestr, gp.GeoSeries), f"traj2_linestr is of type {type(traj2_linestr)}, need to be GeoSeries"
     assert len(traj1_linestr) > 0, "traj1_linestr is empty"
     assert len(traj2_linestr) > 0, "traj2_linestr is empty"
-    
+
     s1 = traj1_linestr.iloc[0].coords
     s2 = traj2_linestr.iloc[0].coords
+    
+    s1 = np.asarray(s1)
+    s2 = np.asarray(s2)
 
-    return tslearn.metrics.lcss(s1, s2, eps=eps)
+    if flip:
+        return max(tslearn.metrics.lcss(s1, s2, eps=eps), tslearn.metrics.lcss(np.flip(s1, axis=0), s2, eps=eps))
+    else:
+        return tslearn.metrics.lcss(s1, s2, eps=eps)
+
+
+def cdist(traj_linestrings, eps=200):
+
+    assert isinstance(traj_linestrings, gp.GeoSeries), f"traj_linestrings is of type {type(traj_linestrings)}, need to be GeoSeries"
+
+    len_traj_list = len(traj_linestrings)
+
+    M = np.zeros((len_traj_list, len_traj_list))
+
+    for i in range(len_traj_list):
+        traj_list_1_i = traj_linestrings[i]
+        for j in range(len_traj_list):
+            traj_list_2_j = traj_linestrings[j]
+            M[i, j] = LCSS(traj_list_1_i, traj_list_2_j,eps)
 
 def match_boundary_points_with_tessellation(raw_trip_sp_gdf, raw_trip_ep_gdf, tesselation_gdf):
     """This function matches the boundary points of the raw trips with the tesselation. 
@@ -540,6 +571,48 @@ def match_trips_to_HL(gp_combined, HL_table, trip_sp_gdf_concat, trip_ep_gdf_con
     return HL_table_se_concat, unmatched_trips, double_assigned_trips, nr_unmatched
 
 
+def find_best_hl_id(hl_id_score_dict, verbose=True):
+    """Finds the best hl_id for a trip based on the scores. Loops through the list of scores in descending order and finds the first unique highest score. If there is no unique highest score, the function finds the largest cluster of hl_ids that have the same score as the highest score.
+
+    Args:
+        hl_id_score_dict (_type_): Dictionary of scores for each hl_id. Scores are stored in a list.
+
+    Returns:
+        _type_: The best hl_id for the trip.
+    """
+
+    # sort lists in hl_id_score_dict descending
+    hl_id_score_dict = {hl_id: sorted(hl_id_score_dict[hl_id], reverse=True) for hl_id in hl_id_score_dict}
+
+    best_hl_id = None
+
+    for i in range(len(hl_id_score_dict[max(hl_id_score_dict, key=lambda x: len(hl_id_score_dict[x]))])):
+        scores = [hl_id_score_dict[hl_id][i] for hl_id in hl_id_score_dict if len(hl_id_score_dict[hl_id]) > i]
+        if len(scores) == len(set(scores)):
+            
+            # Get the best_hl_id of the highest score
+            best_hl_id = [best_hl_id for best_hl_id in hl_id_score_dict if len(hl_id_score_dict[best_hl_id]) > i and hl_id_score_dict[best_hl_id][i] == max(scores)][0]
+            
+            if verbose:
+                print("There is a unique highest score")
+                print("The highest score is {} and the best_hl_id is {}".format(max(scores), best_hl_id))
+            break
+
+    if best_hl_id is None:
+        
+        # Find largest cluster for hl_ids that have the same score as the max_score_hl_id
+        best_hl_ids = [hl_id for hl_id in hl_id_score_dict if len(hl_id_score_dict[hl_id]) > i and hl_id_score_dict[hl_id][i] == max(scores)]
+        
+        # Assign the trip to the hl_id with the largest cluster
+        best_hl_id = max(best_hl_ids, key=lambda x: len(hl_id_score_dict[x]))
+        if verbose:
+            print("There is no unique highest score")
+            print("The hl_ids with the same highest score are", best_hl_ids)
+            print("The best hl_id is", best_hl_id)
+
+    return best_hl_id
+
+
 def assign_double_matched_trips_to_unique_hl(HL_table_se_concat, full_trips_concat_gdf, unmatched_trips, double_assigned_trips, nr_unmatched):
     # Get trips that match only one HL tile with their SP and EP
     uniquely_assigned_trips = HL_table_se_concat.groupby('TRIP_ID').filter(lambda x: len(x) == 1)
@@ -587,16 +660,10 @@ def assign_double_matched_trips_to_unique_hl(HL_table_se_concat, full_trips_conc
             for hl_id in parallel_scores[idx][t_id]:
                 # create new list for this HL under the trip key
                 lcss_scores[t_id][hl_id] = parallel_scores[idx][t_id][hl_id]
-
+    
     # Get and compare max scores across all matched HL for a trip and assign the HL with the max value of any trip
     for trip in lcss_scores:
-        for key in lcss_scores[trip]:
-            if len(lcss_scores[trip][key]) > 0:
-                lcss_scores[trip][key] = max(lcss_scores[trip][key])
-            else:
-                lcss_scores[trip][key] = 0
-        
-        lcss_scores[trip] = max(lcss_scores[trip], key=lcss_scores[trip].get)
+        lcss_scores[trip] = find_best_hl_id(lcss_scores[trip], verbose=False)
 
     # Assign resolved scores to se_HL_lookup table and drop duplicates
     HL_table_se_concat['HL_ID'] = HL_table_se_concat.apply(lambda x: lcss_scores[x['TRIP_ID']] if x['TRIP_ID'] in lcss_scores else x['HL_ID'], axis=1)
@@ -656,7 +723,7 @@ def getOverlappingTrips(traj_id_list, full_trips_concat_gdf_overlap_dict):
     overlapping_trips = [item for sublist in [full_trips_concat_gdf_overlap_dict[t] for t in traj_id_list] for item in sublist] # we first get a list of lists and then flatten it
     return overlapping_trips
 
-def findLargestNonSimultaneousSubset(traj_id_list, full_trips_concat_gdf_overlap_dict, RANDOMIZED_SEARCH_THRESHOLD=300, RANDOMIZED_SEARCH_ITERATIONS=1000):
+def findLargestNonSimultaneousSubset(traj_id_list, full_trips_concat_gdf_overlap_dict, RANDOMIZED_SEARCH_THRESHOLD=30, RANDOMIZED_SEARCH_ITERATIONS=1000):
     """This function finds the largest subset of trajectories that are not simultaneous. It uses a determinitic algorithm if the length of the trajectory ID list is smaller than a threshold and a randomized algorithm if the length is larger than the given threshold.
 
     Args:
@@ -705,13 +772,13 @@ def findLargestNonSimultaneousSubset(traj_id_list, full_trips_concat_gdf_overlap
             return max(subsets, key=len)
         
         # We run the randomized subset search 100 times and return the longest subset
-        print(f'Running randomized subset for search for {RANDOMIZED_SEARCH_ITERATIONS} iterations with {len(traj_id_list)} trajectories...')
+        print(f'Running randomized subset search for {RANDOMIZED_SEARCH_ITERATIONS} iterations with {len(traj_id_list)} trajectories...')
         result = Parallel(n_jobs=-2, verbose=10)(delayed(randomized_subset_search)(traj_id_list) for _ in range(RANDOMIZED_SEARCH_ITERATIONS))
         print('Done. Length of longest subset: ', len(max(result, key=len)))
         return max(result, key=len)
 
 
-def build_clustering_after_HL_assignment(HL_table_trips_concat, full_trip_gdf, trip_concat_dict, full_trips_concat_gdf_overlap_dict):
+def build_clustering_after_HL_assignment(HL_table_trips_concat, full_trip_gdf, trip_concat_dict, full_trips_concat_gdf_overlap_dict, RANDOMIZED_SEARCH_THRESHOLD=30, RANDOMIZED_SEARCH_ITERATIONS=1000):
     # This creates the array with clustering IDs after the HL assignment step
     clustering_after_HL = {}
     HL_table_dict = (HL_table_trips_concat.groupby('HL_ID')
@@ -724,7 +791,7 @@ def build_clustering_after_HL_assignment(HL_table_trips_concat, full_trip_gdf, t
             continue
 
         # find the largest subset of trips that are not simultaneous
-        non_simultaneous_subset = findLargestNonSimultaneousSubset(HL_table_dict[HL], full_trips_concat_gdf_overlap_dict)
+        non_simultaneous_subset = findLargestNonSimultaneousSubset(HL_table_dict[HL], full_trips_concat_gdf_overlap_dict, RANDOMIZED_SEARCH_THRESHOLD, RANDOMIZED_SEARCH_ITERATIONS)
 
         # assign hl_id -1 to all trips that are not part of the largest subset
         for trip in HL_table_dict[HL]:
@@ -756,9 +823,18 @@ def build_clustering_after_HL_assignment(HL_table_trips_concat, full_trip_gdf, t
 def assign_trips_without_match(clustering_after_HL, HL_table_dict, full_trips_concat_gdf, full_trips_concat_gdf_overlap_dict, full_trip_gdf, trip_concat_dict, SIM_THRESH_FOR_NO_MATCH=0.25):
     # This compares all trips that were not assigned to any HL_ID with all trips that were assigned to a HL_ID and assigns the clustering ID of the trip with the highest LCSS score above a certain threshold
     new_cluster_ids = []
+    clustering_after_HL = clustering_after_HL.copy()
+    HL_table_dict = HL_table_dict.copy()
+
+    unmatched_trips = HL_table_dict[-1].copy()
 
     print('Comparing trips that were not assigned to any HL_ID with trips that were assigned to a HL_ID...')
-    for unm_trip in tqdm(HL_table_dict[-1], total=len(HL_table_dict[-1])):
+    for unm_trip in tqdm(unmatched_trips):
+
+        # if this unmatched trip has already been assigned to new cluster with a preceding unmatched trip, skip it
+        if unm_trip not in HL_table_dict[-1]:
+            continue
+
         # compute LCSS for all HL_IDs in clustering_after_HL
         scores = {}
         most_similar_trip_per_hl_id = {}
@@ -774,70 +850,76 @@ def assign_trips_without_match(clustering_after_HL, HL_table_dict, full_trips_co
             # find the trip with the highest LCSS score for current HL_ID
             max_score = max(scores[hl_id].values())
             scores[hl_id] = max_score
-            
-        # find the HL_ID with the highest LCSS score
-        max_score_across_hl_id = max(scores.values())
-        max_score_hl_id = [k for k, v in scores.items() if v == max_score_across_hl_id] #  in theory there could be two trips of different HL_ids with the same LCSS score. This is why this is a list
+        
+        # Find the LCSS scores that are duplicated across HL_IDs
+        seen = set()
+        duplicated_scores = [t for t in scores.values() if t in seen or seen.add(t)]
+        
+        for max_score_hl_id, max_score_across_hl_id in sorted(scores.items(), key=lambda x:x[1], reverse=True):
+            if max_score_across_hl_id > SIM_THRESH_FOR_NO_MATCH:
+                # throw error if length of max_score_hl_id is greater than 1 and the max_score_across_hl_id is above the threshold
+                if max_score_across_hl_id in duplicated_scores:
+                    print("There are two or more HL_IDs with the same LCSS score. Looking for second highest LCSS score...")
 
-        # throw error if length of max_score_hl_id is greater than 1 and the max_score_across_hl_id is above the threshold
-        if len(max_score_hl_id) > 1 and max_score_across_hl_id > SIM_THRESH_FOR_NO_MATCH:
-            print(scores)
-            print(unm_trip)
-            print(most_similar_trip_per_hl_id[max_score_hl_id[0]])
-            print(most_similar_trip_per_hl_id[max_score_hl_id[1]])
-            print("There are two HL_IDs with the same LCSS score. Looking for second highest LCSS score...")
+                    # Get hl_ids that have the same LCSS score as the max_score_hl_id
+                    same_score_hl_ids = [k for k, v in scores.items() if v == max_score_across_hl_id]
+                    print('Candidate HL_IDs:', same_score_hl_ids)
 
-            # find the second highest LCSS score
-            scores[max_score_hl_id[0]] = [LCSS(full_trips_concat_gdf.query("TRIP_ID == @unm_trip").geometry, full_trips_concat_gdf.query("TRIP_ID == @t").geometry) for t in HL_table_dict[max_score_hl_id[0]] if t != unm_trip]
-            scores[max_score_hl_id[1]] = [LCSS(full_trips_concat_gdf.query("TRIP_ID == @unm_trip").geometry, full_trips_concat_gdf.query("TRIP_ID == @t").geometry) for t in HL_table_dict[max_score_hl_id[1]] if t != unm_trip]
-            
-            # find the HL_ID with the second highest LCSS score and use that as the max_score_hl_id
-            if sorted(scores[max_score_hl_id[0]])[-2] > sorted(scores[max_score_hl_id[1]])[-2]:
-                max_score_hl_id = max_score_hl_id[0]
+                    
+                    # Find lcss scores of all trips in HL_IDs with the same LCSS score
+                    lcss_scores_of_hl_same_score = {}
+                    for hl_id in same_score_hl_ids:
+                        lcss_scores = [LCSS(full_trips_concat_gdf.query("TRIP_ID == @unm_trip").geometry, full_trips_concat_gdf.query("TRIP_ID == @t").geometry) for t in HL_table_dict[hl_id] if t != unm_trip]
+                        lcss_scores = sorted(lcss_scores, reverse=True) # sort in descending order
+                        lcss_scores_of_hl_same_score[hl_id] = lcss_scores
+
+                    # Find best hl_id for the unmatched trip
+                    max_score_hl_id = find_best_hl_id(lcss_scores_of_hl_same_score)
+
+                # if the highest LCSS score is above the threshold and the trips that have the highest LCSS score do not overlap in time
+                if unm_trip not in getOverlappingTrips(HL_table_dict[max_score_hl_id], full_trips_concat_gdf_overlap_dict): 
+                    # if hl_id of matched hl_id is -1 then create new cluster for the two trips
+                    if max_score_hl_id == -1:
+                        # Create new cluster id that i one higher than the highest clustering ID and the number of new clusters
+                        new_cluster_id = max(clustering_after_HL.values()) + 1 + len(new_cluster_ids)
+                        print("no match and assign new cluster id", new_cluster_id, "to trips", unm_trip, most_similar_trip_per_hl_id[max_score_hl_id])
+
+                        # create new cluster with ID that is one higher than the highest clustering ID
+                        HL_table_dict[new_cluster_id] = [unm_trip, most_similar_trip_per_hl_id[max_score_hl_id]]
+                        new_cluster_ids.append(new_cluster_id)
+
+                        # Remove trips from -1 hl_id to avoid two equal LCSS scores error
+                        HL_table_dict[-1].remove(most_similar_trip_per_hl_id[max_score_hl_id])
+                        HL_table_dict[-1].remove(unm_trip)
+
+                    # if hl_id of matched hl_id is not -1 then assign the clustering ID of the matched HL_ID to the trip
+                    else:
+                        print("existing match and assign cluster id", max_score_hl_id, "to trip", unm_trip)
+                        # Append the trip to the list of trips that are part of the HL_ID with the highest LCSS score
+                        HL_table_dict[max_score_hl_id].append(unm_trip)
+
+                        # Remove trip from -1 hl_id to avoid two equal LCSS scores error
+                        HL_table_dict[-1].remove(unm_trip)
+
+                        # assign the clustering ID of the HL_ID with the highest LCSS score to the trip
+                        # This overwrites the previous clustering ID of the trip that was assigned in the previous step
+                        clustering_after_HL[getIndexInList(unm_trip, full_trip_gdf)] = clustering_after_HL[getIndexInList(HL_table_dict[max_score_hl_id][0], full_trip_gdf)] # This is a list of length one as asserted above
+
+                        # Check if this trip is a concatenated trip and assign the same clustering ID to all trips that are part of the concatenated trip
+                        if unm_trip in trip_concat_dict:
+                            for t in trip_concat_dict[unm_trip]:
+                                clustering_after_HL[getIndexInList(t, full_trip_gdf)] = clustering_after_HL[getIndexInList(HL_table_dict[max_score_hl_id][0], full_trip_gdf)] # This is a list of length one as asserted above
+                    
+                    # If successful, break out of the for loop
+                    break
+                else:
+                    # if trip overlaps in time with other trips in the same HL_ID
+                    print("trip overlaps in time with other trips in the same HL_ID")
+
             else:
-                max_score_hl_id = max_score_hl_id[1]
-            print("Done. Second highest LCSS score is for HL_ID", max_score_hl_id)
-
-        else:
-            max_score_hl_id = max_score_hl_id[0]
-
-        # if the highest LCSS score is above the threshold and the trips that have the highest LCSS score do not overlap in time
-        if max_score_across_hl_id > SIM_THRESH_FOR_NO_MATCH and unm_trip not in getOverlappingTrips(HL_table_dict[max_score_hl_id], full_trips_concat_gdf_overlap_dict): 
-            # if hl_id of matched hl_id is -1 then create new cluster for the two trips
-            if max_score_hl_id == -1:
-                # Create new cluster id that i one higher than the highest clustering ID and the number of new clusters
-                new_cluster_id = max(clustering_after_HL.values()) + 1 + len(new_cluster_ids)
-                print("no match and assign new cluster id", new_cluster_id, "to trips", unm_trip, most_similar_trip_per_hl_id[max_score_hl_id])
-
-                # create new cluster with ID that is one higher than the highest clustering ID
-                HL_table_dict[new_cluster_id] = [unm_trip, most_similar_trip_per_hl_id[max_score_hl_id]]
-                new_cluster_ids.append(new_cluster_id)
-
-                # Remove trips from -1 hl_id to avoid two equal LCSS scores error
-                HL_table_dict[-1].remove(most_similar_trip_per_hl_id[max_score_hl_id])
-                HL_table_dict[-1].remove(unm_trip)
-
-            # if hl_id of matched hl_id is not -1 then assign the clustering ID of the matched HL_ID to the trip
-            else:
-                print("existing match and assign cluster id", max_score_hl_id, "to trip", unm_trip)
-                # Append the trip to the list of trips that are part of the HL_ID with the highest LCSS score
-                HL_table_dict[max_score_hl_id].append(unm_trip)
-
-                # Remove trip from -1 hl_id to avoid two equal LCSS scores error
-                HL_table_dict[-1].remove(unm_trip)
-
-                # assign the clustering ID of the HL_ID with the highest LCSS score to the trip
-                # This overwrites the previous clustering ID of the trip that was assigned in the previous step
-                clustering_after_HL[getIndexInList(unm_trip, full_trip_gdf)] = clustering_after_HL[getIndexInList(HL_table_dict[max_score_hl_id][0], full_trip_gdf)] # This is a list of length one as asserted above
-
-                # Check if this trip is a concatenated trip and assign the same clustering ID to all trips that are part of the concatenated trip
-                if unm_trip in trip_concat_dict:
-                    for t in trip_concat_dict[unm_trip]:
-                        clustering_after_HL[getIndexInList(t, full_trip_gdf)] = clustering_after_HL[getIndexInList(HL_table_dict[max_score_hl_id][0], full_trip_gdf)] # This is a list of length one as asserted above
-        else:
-            # if trip overlaps in time with other trips in the same HL_ID
-            if unm_trip in getOverlappingTrips(HL_table_dict[max_score_hl_id], full_trips_concat_gdf_overlap_dict):
-                print("trip overlaps in time with other trips in the same HL_ID")
+                # LCSS scores now too low to match
+                print("LCSS scores too low to match")
+                break
     print('Done.')        
 
     # Assign clustering IDs to all trips that are part of a new cluster
