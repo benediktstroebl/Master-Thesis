@@ -30,7 +30,7 @@ def load_geolife(n_rand_users=None, n_trajs=None, only_toy_data=False):
         geolife_raw_gdf = geolife_raw_gdf.query('user_id in @toy_person_ids')
 
     # Load geolife tesselated data with EPSG:32650 (China)
-    geolife_tesselation_gdf = gp.read_file("W:/Master-Thesis-Repository/data/freemove_dlr_data/tessellation_geolife.geojson", geometry='geometry').to_crs('EPSG:32650')
+    geolife_tesselation_gdf = gp.read_file("../data/geolife/tessellation_geolife.geojson", geometry='geometry').to_crs('EPSG:32650')
 
     # Replace traj_id with increasing integer values
     geolife_raw_gdf['traj_id'] = range(0, len(geolife_raw_gdf))
