@@ -10,6 +10,10 @@ from sklearn import metrics
 from scipy.optimize import linear_sum_assignment
 import tslearn.metrics
 import matplotlib.pyplot as plt
+import datetime
+import os.path
+from sklearn.metrics import confusion_matrix
+from scipy.optimize import linear_sum_assignment as linear_assignment
 
 # Parameters
 LCSS_EPS = 200
@@ -52,6 +56,35 @@ def getGroundTruth(full_trip_gdf):
     return ground_truth
 
 
+def _make_cost_matrix(cm):
+    s = np.max(cm)
+    return (- cm + s)
+
+
+def cluster_acc(y_true, y_pred):
+    """
+    Calculate clustering accuracy. Require scikit-learn installed
+    # Arguments
+        y: true labels, numpy.array with shape `(n_samples,)`
+        y_pred: predicted labels, numpy.array with shape `(n_samples,)`
+    # Return
+        accuracy, in [0,1]
+    """
+    y_true = np.asarray(y_true.copy())
+    y_pred = np.asarray(y_pred.copy())
+
+    y_true = y_true.astype(np.int64)
+    assert y_pred.size == y_true.size
+
+    cm = confusion_matrix(y_true, y_pred)
+
+    row_ind, col_ind = linear_assignment(_make_cost_matrix(cm))
+
+    cm_permuted = cm[:, col_ind][row_ind, :]
+
+    return np.trace(cm_permuted) / np.sum(cm_permuted)
+
+
 def evaluate(clustering, full_trip_gdf):
     # Get ground truth labels
     ground_truth = getGroundTruth(full_trip_gdf)
@@ -71,9 +104,57 @@ def evaluate(clustering, full_trip_gdf):
     print(f"MI: {metrics.mutual_info_score(ground_truth, clustering):.3f}")
     print(f"NMI: {metrics.normalized_mutual_info_score(ground_truth, clustering):.3f}")
     print(f"AMI: {metrics.adjusted_mutual_info_score(ground_truth, clustering):.3f}")
+    print(f"Cluster accuracy: {cluster_acc(ground_truth, clustering):.3f}")
 
 
-def LCSS(traj1_linestr, traj2_linestr, eps=LCSS_EPS, flip=LCSS_FLIP):
+def store_results(clustering_concat, clustering_after_HL_assignment, clustering_after_double_assign_HL, full_trip_gdf):
+    # Get ground truth labels
+    ground_truth = getGroundTruth(full_trip_gdf)
+
+    # Write all clustering metrics of evaluate() to csv and add columns for parameters
+    result_dicts = []
+    for clustering in [clustering_concat, clustering_after_HL_assignment, clustering_after_double_assign_HL]:
+        result_dict = {}
+        result_dict['Homogeneity'] = metrics.homogeneity_score(ground_truth, clustering)
+        result_dict['Completeness'] = metrics.completeness_score(ground_truth, clustering)
+        result_dict['V-measure'] = metrics.v_measure_score(ground_truth, clustering)
+        result_dict['Rand index'] = metrics.rand_score(ground_truth, clustering)
+        result_dict['ARI'] = metrics.adjusted_rand_score(ground_truth, clustering)
+        result_dict['MI'] = metrics.mutual_info_score(ground_truth, clustering)
+        result_dict['NMI'] = metrics.normalized_mutual_info_score(ground_truth, clustering)
+        result_dict['AMI'] = metrics.adjusted_mutual_info_score(ground_truth, clustering)
+        result_dict['Cluster accuracy'] = cluster_acc(ground_truth, clustering)
+        result_dicts.append(result_dict)
+
+    df = pd.DataFrame(result_dicts)
+
+    # Add column with date and time
+    df['Date'] = datetime.datetime.now().strftime("%Y-%m-%d")
+    df['Time'] = datetime.datetime.now().strftime("%H:%M:%S")
+
+    # Create a new column for each parameter
+    df['LCSS_EPS'] = LCSS_EPS
+    df['LCSS_FLIP'] = LCSS_FLIP
+    df['CHAINING_INFLOW_HR_DIFF_THRESHOLD'] = CHAINING_INFLOW_HR_DIFF_THRESHOLD
+    df['CHAINING_HR_DIFF_THRESHOLD'] = CHAINING_HR_DIFF_THRESHOLD
+    df['HL_SP_START_TIME'] = HL_SP_START_TIME
+    df['HL_SP_END_TIME'] = HL_SP_END_TIME
+    df['HL_EP_START_TIME'] = HL_EP_START_TIME
+    df['HL_EP_END_TIME'] = HL_EP_END_TIME
+    df['RANDOMIZED_SIMULTANEOUS_SEARCH_ITERATIONS'] = RANDOMIZED_SIMULTANEOUS_SEARCH_ITERATIONS
+    df['SIM_THRESH_FOR_NO_MATCH_TRIPS'] = SIM_THRESH_FOR_NO_MATCH_TRIPS
+
+    # Check if file exists
+    file_exists = os.path.isfile('results.csv')
+
+    # Write to csv (append)
+    if not file_exists:
+        df.to_csv('results.csv', mode='a', header=True, index=False)
+    else:
+        df.to_csv('results.csv', mode='a', header=False, index=False)
+
+
+def LCSS(traj1_linestr, traj2_linestr, eps=200, flip=True):
     """This function takes in two GeoSeries and takes the top entry linestring. It then calculates the Least Common Sub-Sequence metric for these two and returns the value.
 
     Args:
@@ -84,14 +165,20 @@ def LCSS(traj1_linestr, traj2_linestr, eps=LCSS_EPS, flip=LCSS_FLIP):
     Returns:
         _type_: float
     """
-    assert isinstance(traj1_linestr, gp.GeoSeries), f"traj1_linestr is of type {type(traj1_linestr)}, need to be GeoSeries"
-    assert isinstance(traj2_linestr, gp.GeoSeries), f"traj2_linestr is of type {type(traj2_linestr)}, need to be GeoSeries"
-    assert len(traj1_linestr) > 0, "traj1_linestr is empty"
-    assert len(traj2_linestr) > 0, "traj2_linestr is empty"
 
-    s1 = traj1_linestr.iloc[0].coords
-    s2 = traj2_linestr.iloc[0].coords
     
+    
+
+    if isinstance(traj1_linestr, gp.GeoSeries):
+        s1 = traj1_linestr.iloc[0].coords
+    else:
+        s1 = traj1_linestr.coords
+        
+    if isinstance(traj2_linestr, gp.GeoSeries):
+        s2 = traj2_linestr.iloc[0].coords
+    else:
+        s2 = traj2_linestr.coords
+
     s1 = np.asarray(s1)
     s2 = np.asarray(s2)
 
@@ -101,19 +188,38 @@ def LCSS(traj1_linestr, traj2_linestr, eps=LCSS_EPS, flip=LCSS_FLIP):
         return tslearn.metrics.lcss(s1, s2, eps=eps)
 
 
-def cdist(traj_linestrings, eps=LCSS_EPS):
+def cdist(traj_linestrings, eps=200):
+    """This function takes in a GeoSeries of linestrings and calculates the LCSS distance matrix.
+
+    Args:
+        traj_linestrings (_type_): _description_
+        eps (int, optional): _description_. Defaults to 200.
+
+    Returns:
+        _type_: The distance matrix of the LCSS metric
+    """
 
     assert isinstance(traj_linestrings, gp.GeoSeries), f"traj_linestrings is of type {type(traj_linestrings)}, need to be GeoSeries"
 
     len_traj_list = len(traj_linestrings)
 
+    traj_linestrings = traj_linestrings.reset_index(drop=True)
+
     M = np.zeros((len_traj_list, len_traj_list))
 
-    for i in range(len_traj_list):
+    for i in tqdm(range(len_traj_list)):
         traj_list_1_i = traj_linestrings[i]
-        for j in range(len_traj_list):
+        for j in range(i+1,len_traj_list):
             traj_list_2_j = traj_linestrings[j]
             M[i, j] = LCSS(traj_list_1_i, traj_list_2_j,eps)
+
+    # Symmetrize
+    M = M + M.T
+
+    # Set diagonal to 1
+    np.fill_diagonal(M, 1)
+
+    return M
 
 
 def match_boundary_points_with_tessellation(raw_trip_sp_gdf, raw_trip_ep_gdf, tesselation_gdf):
@@ -1050,6 +1156,8 @@ def run_full_attack(raw_full_trip_gdf, raw_trip_sp_gdf, raw_trip_ep_gdf, tessela
     print(f"Number of unique clusters: {len(set(list(dict(sorted(clustering_after_double_assign_HL.items())).values())))}")
     evaluate(list(dict(sorted(clustering_after_double_assign_HL.items())).values()), full_trip_gdf)
 
-
+    print("\nStoring results to csv...")
+    store_results(clustering_concat, list(dict(sorted(clustering_after_HL.items())).values()), list(dict(sorted(clustering_after_double_assign_HL.items())).values()), full_trip_gdf)
+    print("Done.")
 
 
