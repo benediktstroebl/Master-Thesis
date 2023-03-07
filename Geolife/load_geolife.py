@@ -12,31 +12,15 @@ from shapely import Point
 
 # In[81]:
 
-
-# Load trajectories from all user from individual csv files
-path = '..\data\geolife\split_trajectories' # Path to split trajectories
-all_files = Path(path).glob('*.csv')
-
-li = []
-
-for filename in all_files:
-    df = pd.read_csv(filename, index_col=None, header=0)
-    li.append(df)
-
-geolife_raw_gdf = pd.concat(li, axis=0, ignore_index=True)
-
-
-# In[82]:
-
-
 # Load geolife data with EPSG:32650 (China)
-geolife_raw_gdf = gp.GeoDataFrame(geolife_raw_gdf, geometry=gp.GeoSeries.from_wkt(geolife_raw_gdf['geometry']), crs='EPSG:32650')
-
+print("Reading geolife geojson file...")
+geolife_raw_gdf = gp.read_file("../data/geolife/geolife_splitted.geojson", geometry='geometry')
+print("Done.")
 
 # In[ ]:
 
 # Load geolife tesselated data with EPSG:32650 (China)
-geolife_tesselation_gdf = gp.read_file("W:/Master-Thesis-Repository/data/freemove_dlr_data/tessellation_geolife.geojson", crs='EPSG:32650', geometry='geometry')
+geolife_tesselation_gdf = gp.read_file("W:/Master-Thesis-Repository/data/freemove_dlr_data/tessellation_geolife.geojson", geometry='geometry').to_crs('EPSG:32650')
 
 
 # In[83]:
