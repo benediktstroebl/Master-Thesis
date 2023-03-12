@@ -12,26 +12,40 @@ import tslearn.metrics
 import matplotlib.pyplot as plt
 import datetime
 import os.path
+import os
+import shutil
 from sklearn.metrics import confusion_matrix
 from scipy.optimize import linear_sum_assignment as linear_assignment
+from sklearn.cluster import AffinityPropagation, AgglomerativeClustering
+
+# this for jsd
+from PIL import Image
+from scipy.spatial.distance import jensenshannon
+from rpy2.situation import get_r_home
+os.environ["R_HOME"] = get_r_home()
+import rpy2.robjects as robjects
 
 # Parameters
 LCSS_EPS = 200
 LCSS_FLIP = True
-
-CHAINING_INFLOW_HR_DIFF_THRESHOLD = 4
-CHAINING_HR_DIFF_THRESHOLD = 8
 
 HL_SP_START_TIME = '6:00'
 HL_SP_END_TIME = '10:00'
 HL_EP_START_TIME = '18:00'
 HL_EP_END_TIME = '0:00'
 
-RANDOMIZED_SIMULTANEOUS_SEARCH_ITERATIONS = 200
+CHAINING_INFLOW_HR_DIFF_THRESHOLD = 4
+CHAINING_HR_DIFF_THRESHOLD = 8
 
-SIM_THRESH_FOR_NO_MATCH_TRIPS = 0.3
+HL_SP_OUTFLOW_THRESHOLD = 2
+HL_EP_OUTFLOW_THRESHOLD = 4
 
+RANDOMIZED_SIMULTANEOUS_SEARCH_ITERATIONS = 400
 
+SIM_THRESH_FOR_NO_MATCH_TRIPS = 0.5
+
+# JSD Parameters
+GRID_RESOLUTION_JSD = 1000
 
 def plot_hour_of_day_distribution(gdf):
     """Plot the distribution of trips across hour of the day.
@@ -42,11 +56,67 @@ def plot_hour_of_day_distribution(gdf):
     # Plot the distribution of trips over the day
     gdf['HOUR'] = pd.to_datetime(gdf['TRIP_START'], format='%Y-%m-%d %H:%M:%S').dt.hour
     gdf['HOUR'].hist(bins=24, figsize=(10, 5), ec='black', alpha=0.5)
+
     plt.title('Distribution of trips across the day')
     plt.xlabel('Hour of the day')
     plt.ylabel('Number of trips')
     plt.show()
 
+def plot_distribution_of_trip_durations(gdf):
+    """Plot the distribution of trip durations.
+
+    Args:
+        gdf (_type_): GeoDataFrame containing the trips.
+    """
+    # Plot the distribution of trip durations
+    gdf['TRIP_DURATION_IN_MINS'].hist(bins=100, figsize=(10, 5), ec='black', alpha=0.5)
+
+    # add a vertical line at the mean and label it with the mean value
+    plt.axvline(gdf['TRIP_DURATION_IN_MINS'].mean(), color='k', linestyle='dashed', linewidth=1)
+
+    plt.title('Distribution of trip durations')
+    plt.xlabel('Trip duration (mins)')
+    plt.ylabel('Number of trips')
+    plt.show()
+
+def plot_distribution_of_trip_distances(gdf):
+    """Plot the distribution of trip distances.
+
+    Args:
+        gdf (_type_): GeoDataFrame containing the trips.
+    """
+    # Plot the distribution of trip distances
+    gdf['TRIP_LEN_IN_MTRS'].hist(bins=100, figsize=(10, 5), ec='black', alpha=0.5)
+    # add a vertical line at the mean and label it with the mean value
+    plt.axvline(gdf['TRIP_LEN_IN_MTRS'].mean(), color='k', linestyle='dashed', linewidth=1)
+    plt.title('Distribution of trip distances')
+    plt.xlabel('Trip distance (m)')
+    plt.ylabel('Number of trips')
+    plt.show()
+
+def plot_distribution_of_number_of_trips_per_user(gdf):
+    """Plot the distribution of number of trips per user.
+
+    Args:
+        gdf (_type_): GeoDataFrame containing the trips.
+    """
+    # Plot the distribution of number of trips per user
+    gdf['PERSON_ID'].value_counts().hist(bins=40, figsize=(10, 5), ec='black', alpha=0.5)
+
+    # add a vertical line at the mean and label it with the mean value
+    plt.axvline(gdf['PERSON_ID'].value_counts().mean(), color='k', linestyle='dashed', linewidth=1)
+    
+    plt.title('Distribution of number of trips per user')
+    plt.xlabel('Number of trips')
+    plt.ylabel('Number of users')
+    plt.show()
+
+def plot_distribution_of_JSD_dist_matrix(JSD_dist_matrix):
+    plt.hist(JSD_dist_matrix.flatten(), bins=100)
+    # Add labels to plot
+    plt.title('Distribution of JSD')
+    plt.xlabel('JSD')
+    plt.show()
 
 def getGroundTruth(full_trip_gdf):
     # Get ground truth labels
@@ -55,11 +125,9 @@ def getGroundTruth(full_trip_gdf):
     ground_truth = df.sort_values('TRIP_ID').ID.to_list()
     return ground_truth
 
-
 def _make_cost_matrix(cm):
     s = np.max(cm)
     return (- cm + s)
-
 
 def cluster_acc(y_true, y_pred):
     """
@@ -84,7 +152,6 @@ def cluster_acc(y_true, y_pred):
 
     return np.trace(cm_permuted) / np.sum(cm_permuted)
 
-
 def evaluate(clustering, full_trip_gdf):
     # Get ground truth labels
     ground_truth = getGroundTruth(full_trip_gdf)
@@ -106,14 +173,13 @@ def evaluate(clustering, full_trip_gdf):
     print(f"AMI: {metrics.adjusted_mutual_info_score(ground_truth, clustering):.3f}")
     print(f"Cluster accuracy: {cluster_acc(ground_truth, clustering):.3f}")
 
-
-def store_results(clustering_concat, clustering_after_HL_assignment, clustering_after_double_assign_HL, full_trip_gdf):
+def store_results(clustering_concat, clustering_after_HL_assignment, clustering_after_assign_no_match, full_trip_gdf):
     # Get ground truth labels
     ground_truth = getGroundTruth(full_trip_gdf)
 
     # Write all clustering metrics of evaluate() to csv and add columns for parameters
     result_dicts = []
-    for clustering in [clustering_concat, clustering_after_HL_assignment, clustering_after_double_assign_HL]:
+    for clustering in [clustering_concat, clustering_after_HL_assignment, clustering_after_assign_no_match]:
         result_dict = {}
         result_dict['Homogeneity'] = metrics.homogeneity_score(ground_truth, clustering)
         result_dict['Completeness'] = metrics.completeness_score(ground_truth, clustering)
@@ -153,7 +219,6 @@ def store_results(clustering_concat, clustering_after_HL_assignment, clustering_
     else:
         df.to_csv('results.csv', mode='a', header=False, index=False)
 
-
 def LCSS(traj1_linestr, traj2_linestr, eps=200, flip=True):
     """This function takes in two GeoSeries and takes the top entry linestring. It then calculates the Least Common Sub-Sequence metric for these two and returns the value.
 
@@ -186,7 +251,6 @@ def LCSS(traj1_linestr, traj2_linestr, eps=200, flip=True):
         return max(tslearn.metrics.lcss(s1, s2, eps=eps), tslearn.metrics.lcss(np.flip(s1, axis=0), s2, eps=eps))
     else:
         return tslearn.metrics.lcss(s1, s2, eps=eps)
-
 
 def cdist(traj_linestrings, eps=200):
     """This function takes in a GeoSeries of linestrings and calculates the LCSS distance matrix.
@@ -221,6 +285,101 @@ def cdist(traj_linestrings, eps=200):
 
     return M
 
+def raster_usage_count(city, GRID_RESOLUTION_JSD, input_file_path, output_file_path):
+
+    if city == 'beijing':
+        MIN_LNG, MIN_LAT, MAX_LNG, MAX_LAT = 116.08, 39.66, 116.69, 40.27 # Beijing center
+        TARGET_EPSG = 32650
+    elif city == 'berlin':
+        MIN_LNG, MIN_LAT, MAX_LNG, MAX_LAT = 12.562133, 52.099718, 14.129426, 52.803108  # Berlin center
+        TARGET_EPSG = 3035
+
+    robjects.r("""
+        library(sf)
+
+        raster_usage_count_R <- function(MIN_LNG, MIN_LAT, MAX_LNG, MAX_LAT, 
+                        resolution, TARGET_EPSG,
+                        INPUT_FILE_PATH, OUTPUT_FILE_PATH){
+                
+                # transform bounding box from 4326 to 3035
+                pts <- matrix(c(MIN_LNG, MIN_LAT, MIN_LNG, MAX_LAT, MAX_LNG, 
+                                MAX_LAT, MAX_LNG, MIN_LAT, MIN_LNG, MIN_LAT), ncol=2, byrow=TRUE)
+                polygon_ext <- st_polygon(list(pts)) |> st_sfc(crs=4326) |> st_transform(TARGET_EPSG)
+                extent <- st_as_sf(polygon_ext)|> terra::ext()
+                
+                
+                raster_template <- terra::rast(crs= terra::crs(paste0("epsg:", as.character(TARGET_EPSG))), 
+                                                res=resolution,
+                                                extent=extent,
+                                                vals=0) 
+                
+                input_ls <- read_sf(INPUT_FILE_PATH)|> st_transform(TARGET_EPSG)
+                
+                count_raster <- raster_template 
+
+                for (i in input_ls$TRIP_ID){
+                  line <- input_ls|> dplyr::filter(TRIP_ID == i) |> dplyr::select(geometry)
+                # if line only consists of at least two points
+                if (nrow(sf::st_cast(line, "POINT")) > 1) {
+                        count_raster_temp <- terra::rasterize(terra::vect(line), raster_template, background=0)
+                        count_raster <- count_raster + count_raster_temp
+                  }
+                }
+                
+                terra::writeRaster(count_raster, OUTPUT_FILE_PATH, overwrite=TRUE)
+            }
+        """)
+
+    raster_usage_count_R = robjects.globalenv["raster_usage_count_R"]
+    raster_usage_count_R(MIN_LNG, MIN_LAT, MAX_LNG, MAX_LAT, \
+                            GRID_RESOLUTION_JSD, TARGET_EPSG, input_file_path, output_file_path)
+
+def similarity_of_tifs(alt_path, base_path):
+    # Open image
+    im = Image.open(alt_path)
+    alt_counts = np.array(im)
+    # this is for cells whithout any value (no traj passed through there) -> set to 0
+    alt_counts[alt_counts<0] = 0
+    alt_counts = alt_counts
+
+    im = Image.open(base_path)
+    base_counts = np.array(im)
+    # this is for cells whithout any value (no traj passed through there) -> set to 0
+    base_counts[base_counts<0] = 0
+    base_counts = base_counts
+
+    jsd = jensenshannon(alt_counts.flatten(), base_counts.flatten())
+
+    return jsd
+
+def build_raster_usage_count_tfifs(city, path_to_geojson_files='temp/'):
+
+    for geojson_file in tqdm(os.listdir(path_to_geojson_files)):
+        raster_usage_count(city, GRID_RESOLUTION_JSD, path_to_geojson_files+geojson_file, path_to_geojson_files+geojson_file[:-8]+'.tif')
+
+        # delete geojson file
+        os.remove(path_to_geojson_files+geojson_file)
+
+def cdist_jsd(path_to_tifs='temp/'):
+    nr_clusters = len(os.listdir(path_to_tifs))
+
+    tfif_files = os.listdir(path_to_tifs)
+
+    M = np.zeros((nr_clusters, nr_clusters))
+
+    for i in tqdm(range(nr_clusters)):
+        cluster_alt = tfif_files[i]
+        for j in range(i+1,nr_clusters):
+            cluster_base = tfif_files[j]
+            M[i, j] = similarity_of_tifs(path_to_tifs + cluster_alt, path_to_tifs + cluster_base)
+
+    # Symmetrize
+    M = M + M.T
+
+    # Set diagonal to 1
+    np.fill_diagonal(M, 0)
+
+    return M
 
 def match_boundary_points_with_tessellation(raw_trip_sp_gdf, raw_trip_ep_gdf, tesselation_gdf):
     """This function matches the boundary points of the raw trips with the tesselation. 
@@ -250,7 +409,6 @@ def match_boundary_points_with_tessellation(raw_trip_sp_gdf, raw_trip_ep_gdf, te
 
     return gdf_sp, gdf_ep
 
-
 def extract_trips_that_start_end_in_tessellation(raw_full_trip_gdf, raw_trip_sp_gdf, raw_trip_ep_gdf, gdf_sp, gdf_ep):
     gdf_sp_ids = gdf_sp.TRIP_ID
     gdf_ep_ids = gdf_ep.TRIP_ID
@@ -268,7 +426,6 @@ def extract_trips_that_start_end_in_tessellation(raw_full_trip_gdf, raw_trip_sp_
     print(f"Number of trips outside and therefore dropped: {len(raw_full_trip_gdf) - len(full_trip_gdf)}")
 
     return full_trip_gdf, trip_sp_gdf, trip_ep_gdf, gdf_sp, gdf_ep
-
 
 def build_trip_chain_mapping(gdf_sp, gdf_ep, INFLOW_HR_DIFF_THRESHOLD=CHAINING_INFLOW_HR_DIFF_THRESHOLD, HR_DIFF_THRESHOLD=CHAINING_HR_DIFF_THRESHOLD):
     """This function returns a list of trip chains that are continued trips that happened subsequent to and from same tile within a given time threshold.
@@ -327,7 +484,6 @@ def build_trip_chain_mapping(gdf_sp, gdf_ep, INFLOW_HR_DIFF_THRESHOLD=CHAINING_I
 
     return mapping_cont_trips
 
-
 def evaluate_trip_chaining(mapping_cont_trips, full_trip_gdf):
     """This function evaluates the trip chaining by checking if the chained trips are from the same person.
 
@@ -348,7 +504,6 @@ def evaluate_trip_chaining(mapping_cont_trips, full_trip_gdf):
 
     print(f"Number of edges (matched) between trips: {len(mapping_cont_trips)}")
     print(f"Number of wrong matches: {len(mistakes)}")
-
 
 def getTripChain(trip_id, mapping_cont_trips, chain=[]):
     """ Recursive function that returns a list for all chained trips for a give orig trip_id
@@ -377,7 +532,6 @@ def getTripChain(trip_id, mapping_cont_trips, chain=[]):
             
         
     return chain
-
 
 def merge_trips_from_matching(gdf_sp, mapping_cont_trips, full_trip_gdf):
     """This function merges trips that are chained together from the matching done in build_trip_chain_mapping().
@@ -458,7 +612,6 @@ def merge_trips_from_matching(gdf_sp, mapping_cont_trips, full_trip_gdf):
 
     return full_trips_concat_gdf.reset_index(drop=True), trip_concat_dict
 
-
 def extract_concatenated_trips(full_trips_concat_gdf, gdf_sp, trip_sp_gdf, gdf_ep, trip_ep_gdf):
     # Filter for those trip_ids that are still the start of a trip even after the concatenation (of trip chains)
     t_id_sp = full_trips_concat_gdf.TRIP_ID_FIRST
@@ -475,7 +628,6 @@ def extract_concatenated_trips(full_trips_concat_gdf, gdf_sp, trip_sp_gdf, gdf_e
 
     return gdf_sp_concat, trip_sp_gdf_concat, gdf_ep_concat, trip_ep_gdf_concat
 
-    
 def getIndexInList(trip_id, full_trip_gdf):
     """This function takes in a trip_id and returns the list index of this trip's position in the ground truth clustering.
 
@@ -485,10 +637,11 @@ def getIndexInList(trip_id, full_trip_gdf):
     Returns:
         int: The index of this TRIP_ID in the ground truth clustering vector.
     """
+    full_trip_gdf = full_trip_gdf.reset_index(drop=True)
+
     index_list = full_trip_gdf.sort_values('TRIP_ID').TRIP_ID.to_list()
 
     return index_list.index(trip_id)
-
 
 def build_clustering_after_concatenation(full_trips_concat_gdf, trip_concat_dict, full_trip_gdf):
     """This function builds the clustering vector after the concatenation step.
@@ -503,7 +656,7 @@ def build_clustering_after_concatenation(full_trips_concat_gdf, trip_concat_dict
 
     # This creates the array with clustering IDs after the concatenation step
     clustering_concat = {}
-    for index, trip in full_trips_concat_gdf.reset_index().sort_values('TRIP_ID').iterrows():
+    for index, trip in full_trips_concat_gdf.reset_index(drop=True).sort_values('TRIP_ID').iterrows():
         trip_order_index = getIndexInList(trip.TRIP_ID, full_trip_gdf)
 
         clustering_concat[trip_order_index] = index
@@ -518,8 +671,7 @@ def build_clustering_after_concatenation(full_trips_concat_gdf, trip_concat_dict
 
     return clustering_concat
 
-
-def build_hl_from_start_points(gdf_sp, HL_SP_START_TIME=HL_SP_START_TIME, HL_SP_END_TIME=HL_SP_END_TIME):
+def build_hl_from_start_points(gdf_sp, gdf_ep, HL_SP_START_TIME=HL_SP_START_TIME, HL_SP_END_TIME=HL_SP_END_TIME, HL_SP_OUTFLOW_THRESHOLD=HL_SP_OUTFLOW_THRESHOLD):
     # Generate home locations (HL) from SPs
     gdf_sp.index=pd.to_datetime(gdf_sp.TRIP_START)
     gdf_sp['hl'] = gdf_sp['TRIP_START'].apply(lambda x: 1 if x in gdf_sp.between_time(HL_SP_START_TIME, HL_SP_END_TIME).TRIP_START else 0).astype(object)
@@ -527,6 +679,19 @@ def build_hl_from_start_points(gdf_sp, HL_SP_START_TIME=HL_SP_START_TIME, HL_SP_
 
     # Extract only those cells that are HL
     gdf_hl_sp = gdf_sp[gdf_sp['hl'] == 1]
+    
+    # Filter those hl candidates where there are other trips leaving from within time window
+    for i, trip in gdf_hl_sp.iterrows():
+        tl_id = trip.tile_id
+        tr_id = trip.TRIP_ID
+        st = pd.to_datetime(trip['TRIP_START'], format='%Y-%m-%d %H:%M:%S')
+        outflow = gdf_sp.query('tile_id == @tl_id').copy()
+        outflow['TRIP_START'] = outflow.TRIP_START.astype('datetime64[ns]')
+        outflow['OUTFLOW_HR_DIFF'] = outflow.TRIP_START.apply(lambda x: (x - st).total_seconds()/3600)
+        if len(outflow) > 0:
+            outflow = outflow.query("(OUTFLOW_HR_DIFF <= @HL_SP_OUTFLOW_THRESHOLD) and (OUTFLOW_HR_DIFF >= -@HL_SP_OUTFLOW_THRESHOLD) and (TRIP_ID != @tr_id)") # Take trips 
+            if len(outflow) > 0:
+                gdf_sp.loc[gdf_sp['TRIP_ID']==tr_id, 'hl'] = 0
 
     # create spatial weights matrix
     W = libpysal.weights.Queen.from_dataframe(gdf_hl_sp)
@@ -552,8 +717,7 @@ def build_hl_from_start_points(gdf_sp, HL_SP_START_TIME=HL_SP_START_TIME, HL_SP_
 
     return gdf_hl_combined_sp
 
-
-def build_hl_from_end_points(gdf_ep, HL_EP_START_TIME=HL_EP_START_TIME, HL_EP_END_TIME=HL_EP_END_TIME):
+def build_hl_from_end_points(gdf_sp, gdf_ep, HL_EP_START_TIME=HL_EP_START_TIME, HL_EP_END_TIME=HL_EP_END_TIME, HL_EP_OUTFLOW_THRESHOLD=HL_EP_OUTFLOW_THRESHOLD):
     # Generate home locations (HL) from EPs
     gdf_ep.index=pd.to_datetime(gdf_ep.TRIP_END)
     gdf_ep['hl'] = gdf_ep['TRIP_END'].apply(lambda x: 1 if x in gdf_ep.between_time(HL_EP_START_TIME, HL_EP_END_TIME).TRIP_END else 0).astype(object)
@@ -561,6 +725,20 @@ def build_hl_from_end_points(gdf_ep, HL_EP_START_TIME=HL_EP_START_TIME, HL_EP_EN
 
     # Extract only those cells that are HL
     gdf_hl_ep = gdf_ep[gdf_ep['hl'] == 1]
+    
+    # Filter those hl candidates where there are other trips leaving from within time window
+    for i, trip in gdf_hl_ep.iterrows():
+        tl_id = trip.tile_id
+        tr_id = trip.TRIP_ID
+        et = pd.to_datetime(trip['TRIP_END'], format='%Y-%m-%d %H:%M:%S')
+
+        outflow = gdf_sp.query('tile_id == @tl_id').copy()
+        outflow['TRIP_START'] = outflow.TRIP_START.astype('datetime64[ns]')
+        outflow['OUTFLOW_HR_DIFF'] = outflow.TRIP_START.apply(lambda x: float((x - et).total_seconds()/3600))
+        if len(outflow) > 0: 
+            outflow = outflow.query("(OUTFLOW_HR_DIFF <= @HL_SP_OUTFLOW_THRESHOLD) and (OUTFLOW_HR_DIFF >= 0) and (TRIP_ID != @tr_id)") # Take trips
+            if len(outflow) > 0:
+                gdf_ep.loc[gdf_ep['TRIP_ID']==tr_id, 'hl'] = 0
 
     ### Merge hl cells that are adjacent (touching) to each other 
     # create spatial weights matrix
@@ -585,7 +763,6 @@ def build_hl_from_end_points(gdf_ep, HL_EP_START_TIME=HL_EP_START_TIME, HL_EP_EN
     gdf_hl_combined_ep = gdf_hl_combined_ep.astype(convert_dict)
 
     return gdf_hl_combined_ep
-
 
 def concatenate_hl(gdf_hl_combined_sp, gdf_hl_combined_ep):
     gp_combined = pd.concat([gdf_hl_combined_ep, gdf_hl_combined_sp])
@@ -628,7 +805,6 @@ def concatenate_hl(gdf_hl_combined_sp, gdf_hl_combined_ep):
     print(f"Number of unique HL tiles: {len(HL_table)}")
 
     return gp_combined, HL_table
-
 
 def match_trips_to_HL(gp_combined, HL_table, trip_sp_gdf_concat, trip_ep_gdf_concat, full_trips_concat_gdf):
     # Merge all start and enpoints of all trajectories with HL tiles
@@ -691,8 +867,7 @@ def match_trips_to_HL(gp_combined, HL_table, trip_sp_gdf_concat, trip_ep_gdf_con
 
     return HL_table_se_concat, unmatched_trips, double_assigned_trips, nr_unmatched
 
-
-def find_best_hl_id(hl_id_score_dict, verbose=True):
+def find_best_hl_id(hl_id_score_dict, verbose=False):
     """Finds the best hl_id for a trip based on the scores. Loops through the list of scores in descending order and finds the first unique highest score. If there is no unique highest score, the function finds the largest cluster of hl_ids that have the same score as the highest score.
 
     Args:
@@ -707,10 +882,19 @@ def find_best_hl_id(hl_id_score_dict, verbose=True):
 
     best_hl_id = None
 
-    for i in range(len(hl_id_score_dict[max(hl_id_score_dict, key=lambda x: len(hl_id_score_dict[x]))])):
+    max_length_hl_id_list = len(hl_id_score_dict[max(hl_id_score_dict, key=lambda x: len(hl_id_score_dict[x]))])
+    max_score_in_hl_id_score_dict = max([max(hl_id_score_dict[hl_id], default=0.0) for hl_id in hl_id_score_dict]) # use default to avoid error if list is empty
+
+    if max_score_in_hl_id_score_dict == 0.0:
+        print("All scores are 0.0, assigning -1 as best_hl_id!")
+        return -1
+
+    # for i in max length of all hl_id_score_dict lists
+    for i in range(max_length_hl_id_list):
         scores = [hl_id_score_dict[hl_id][i] for hl_id in hl_id_score_dict if len(hl_id_score_dict[hl_id]) > i]
+
+        # if there is no duplicated score
         if len(scores) == len(set(scores)):
-            
             # Get the best_hl_id of the highest score
             best_hl_id = [best_hl_id for best_hl_id in hl_id_score_dict if len(hl_id_score_dict[best_hl_id]) > i and hl_id_score_dict[best_hl_id][i] == max(scores)][0]
             
@@ -718,11 +902,12 @@ def find_best_hl_id(hl_id_score_dict, verbose=True):
                 print("There is a unique highest score")
                 print("The highest score is {} and the best_hl_id is {}".format(max(scores), best_hl_id))
             break
-
+    
+    # if no unique best hl_id has been found
     if best_hl_id is None:
         
         # Find largest cluster for hl_ids that have the same score as the max_score_hl_id
-        best_hl_ids = [hl_id for hl_id in hl_id_score_dict if len(hl_id_score_dict[hl_id]) > i and hl_id_score_dict[hl_id][i] == max(scores)]
+        best_hl_ids = [hl_id for hl_id in hl_id_score_dict if max_score_in_hl_id_score_dict in hl_id_score_dict[hl_id]]
         
         # Assign the trip to the hl_id with the largest cluster
         best_hl_id = max(best_hl_ids, key=lambda x: len(hl_id_score_dict[x]))
@@ -732,7 +917,6 @@ def find_best_hl_id(hl_id_score_dict, verbose=True):
             print("The best hl_id is", best_hl_id)
 
     return best_hl_id
-
 
 def assign_double_matched_trips_to_unique_hl(HL_table_se_concat, full_trips_concat_gdf, unmatched_trips, double_assigned_trips, nr_unmatched):
     # Get trips that match only one HL tile with their SP and EP
@@ -767,7 +951,7 @@ def assign_double_matched_trips_to_unique_hl(HL_table_se_concat, full_trips_conc
             result_dict[t_id][hl_id].append(score)
         return result_dict
 
-    parallel_scores = Parallel(n_jobs=4, verbose=0)(delayed(compute_lcss_scores)(double_assigned_trip) for index, double_assigned_trip in double_assigned_trips.iterrows())
+    parallel_scores = Parallel(n_jobs=-4, verbose=1)(delayed(compute_lcss_scores)(double_assigned_trip) for index, double_assigned_trip in double_assigned_trips.iterrows())
 
     # Flatten the list of dicts from parallel processing
     lcss_scores = {}
@@ -783,11 +967,12 @@ def assign_double_matched_trips_to_unique_hl(HL_table_se_concat, full_trips_conc
                 lcss_scores[t_id][hl_id] = parallel_scores[idx][t_id][hl_id]
     
     # Get and compare max scores across all matched HL for a trip and assign the HL with the max value of any trip
+    best_hl_ids_dict = {}
     for trip in lcss_scores:
-        lcss_scores[trip] = find_best_hl_id(lcss_scores[trip], verbose=False)
+        best_hl_ids_dict[trip] = find_best_hl_id(lcss_scores[trip], verbose=False)
 
     # Assign resolved scores to se_HL_lookup table and drop duplicates
-    HL_table_se_concat['HL_ID'] = HL_table_se_concat.apply(lambda x: lcss_scores[x['TRIP_ID']] if x['TRIP_ID'] in lcss_scores else x['HL_ID'], axis=1)
+    HL_table_se_concat['HL_ID'] = HL_table_se_concat.apply(lambda x: best_hl_ids_dict[x['TRIP_ID']] if x['TRIP_ID'] in best_hl_ids_dict else x['HL_ID'], axis=1)
     HL_table_se_concat = HL_table_se_concat.drop_duplicates(['TRIP_ID', 'HL_ID']).reset_index(drop=True)
 
     # Assert that the number of trips that are matched to a HL tile plus the the nr of trips that are unmatched is equal to the total number of concatenated trips
@@ -799,7 +984,6 @@ def assign_double_matched_trips_to_unique_hl(HL_table_se_concat, full_trips_conc
 
 
     return HL_table_trips_concat
-
 
 def getTripOverlaps(gdf):
     """This function calculates whether two trips overlap in time.
@@ -830,10 +1014,9 @@ def getTripOverlaps(gdf):
 
         return overlap_dict
 
-    overlap_dicts = Parallel(n_jobs=4, verbose=0)(delayed(getOverlaps)(trip_x) for index_x, trip_x in gdf.iterrows())
+    overlap_dicts = Parallel(n_jobs=-4, verbose=1)(delayed(getOverlaps)(trip_x) for index_x, trip_x in gdf.iterrows())
 
     return {k: v for d in overlap_dicts for k, v in d.items()}
-
 
 def getOverlappingTrips(traj_id_list, full_trips_concat_gdf_overlap_dict):
     """This function finds the overlapping trips for a list of trajectory IDs.
@@ -843,7 +1026,6 @@ def getOverlappingTrips(traj_id_list, full_trips_concat_gdf_overlap_dict):
     """
     overlapping_trips = [item for sublist in [full_trips_concat_gdf_overlap_dict[t] for t in traj_id_list] for item in sublist] # we first get a list of lists and then flatten it
     return overlapping_trips
-
 
 def findLargestNonSimultaneousSubset(traj_id_list, full_trips_concat_gdf_overlap_dict, RANDOMIZED_SEARCH_THRESHOLD=30, RANDOMIZED_SEARCH_ITERATIONS=RANDOMIZED_SIMULTANEOUS_SEARCH_ITERATIONS):
     """This function finds the largest subset of trajectories that are not simultaneous. It uses a determinitic algorithm if the length of the trajectory ID list is smaller than a threshold and a randomized algorithm if the length is larger than the given threshold.
@@ -895,10 +1077,9 @@ def findLargestNonSimultaneousSubset(traj_id_list, full_trips_concat_gdf_overlap
         
         # We run the randomized subset search n times and return the longest subset
         print(f'Running randomized subset search for {RANDOMIZED_SEARCH_ITERATIONS} iterations with {len(traj_id_list)} trajectories...')
-        result = Parallel(n_jobs=4, verbose=0)(delayed(randomized_subset_search)(traj_id_list) for _ in range(RANDOMIZED_SEARCH_ITERATIONS))
+        result = Parallel(n_jobs=-4, verbose=1)(delayed(randomized_subset_search)(traj_id_list) for _ in range(RANDOMIZED_SEARCH_ITERATIONS))
         print('Done. Length of longest subset: ', len(max(result, key=len)))
         return max(result, key=len)
-
 
 def build_clustering_after_HL_assignment(HL_table_trips_concat, full_trip_gdf, trip_concat_dict, full_trips_concat_gdf_overlap_dict):
     # This creates the array with clustering IDs after the HL assignment step
@@ -939,7 +1120,6 @@ def build_clustering_after_HL_assignment(HL_table_trips_concat, full_trip_gdf, t
                 clustering_after_HL[getIndexInList(t, full_trip_gdf)] = index + len(HL_table_dict) - 1
 
     return clustering_after_HL, HL_table_dict
-
 
 def assign_trips_without_match(clustering_after_HL, HL_table_dict, full_trips_concat_gdf, full_trips_concat_gdf_overlap_dict, full_trip_gdf, trip_concat_dict, SIM_THRESH_FOR_NO_MATCH=SIM_THRESH_FOR_NO_MATCH_TRIPS):
     # This compares all trips that were not assigned to any HL_ID with all trips that were assigned to a HL_ID and assigns the clustering ID of the trip with the highest LCSS score above a certain threshold
@@ -996,6 +1176,7 @@ def assign_trips_without_match(clustering_after_HL, HL_table_dict, full_trips_co
 
                     # Find best hl_id for the unmatched trip
                     max_score_hl_id = find_best_hl_id(lcss_scores_of_hl_same_score)
+                    print("Found best HL_ID after comparing candidates:", max_score_hl_id)
 
                 # if the highest LCSS score is above the threshold and the trips that have the highest LCSS score do not overlap in time
                 if unm_trip not in getOverlappingTrips(HL_table_dict[max_score_hl_id], full_trips_concat_gdf_overlap_dict): 
@@ -1057,9 +1238,78 @@ def assign_trips_without_match(clustering_after_HL, HL_table_dict, full_trips_co
 
     return clustering_after_HL
 
+def build_trip_id_clustering_dict(clustering, full_trip_gdf):
+    """Build a dictionary that maps each trip_id to its cluster_id.
 
-def run_full_attack(raw_full_trip_gdf, raw_trip_sp_gdf, raw_trip_ep_gdf, tesselation_gdf):
+    Args:
+        clustering (_type_): Ordered list of cluster_ids for each trip.
+        full_trip_gdf (_type_): GeoDataFrame containing all the trips.
+
+    Returns:
+        _type_: Dictionary that maps each trip_id to its cluster_id.
+    """
+
+    full_trip_gdf = full_trip_gdf.reset_index(drop=True)
+
+    trip_id_cluster_dict = {}
+    for i, trip in full_trip_gdf.iterrows():
+        trip_id_cluster_dict[trip.TRIP_ID] = clustering[i]
+
+    return trip_id_cluster_dict
+
+def write_cluster_geojson(trip_id_cluster_dict, full_trip_gdf):
+    # Create temp directory to store the geojson files
+    if not os.path.exists('temp'):
+        os.makedirs('temp')
+
+    for cluster_id in trip_id_cluster_dict.values():
+        # get all trip_ids in this cluster
+        trip_ids = [k for k, v in trip_id_cluster_dict.items() if v == cluster_id]
+
+        # Write the cluster to a geojson file
+        cluster_gdf = full_trip_gdf[full_trip_gdf['TRIP_ID'].isin(trip_ids)]
+
+        # Write the cluster to a geojson file
+        cluster_gdf.to_file(f'temp/cluster_{cluster_id}.geojson', driver='GeoJSON')
+
+def delete_temp_directory():
+    # Delete the temp directory
+    shutil.rmtree('temp')
+
+def build_cluster_of_cluster(clustering_of_clusters_labels, trip_id_cluster_dict, path_to_tifs='temp/'):
+    #check if clustering_of_clusters_labels is a numpy array
+    if isinstance(clustering_of_clusters_labels, np.ndarray):
+        clustering_of_clusters_labels = clustering_of_clusters_labels.tolist()
+
+    # extract cluster labels from file names
+    cluster_ids = [int(file_name.split('_')[1].split('.')[0]) for file_name in os.listdir(path_to_tifs)]
+
+    # create dict with cluster labels as keys and cluster numbers as values
+    cluster_of_cluster_dict = dict(zip(cluster_ids, clustering_of_clusters_labels))
+
+    clustering_after_cluster_of_cluster = [cluster_of_cluster_dict[trip_id_cluster_dict[key]] for key in trip_id_cluster_dict.keys()]
+
+    return clustering_after_cluster_of_cluster
+
+def run_full_attack(raw_full_trip_gdf, raw_trip_sp_gdf, raw_trip_ep_gdf, tesselation_gdf, city, 
+                    LCSS_EPS=LCSS_EPS, 
+                    LCSS_FLIP=LCSS_FLIP, 
+                    HL_SP_START_TIME=HL_SP_START_TIME, 
+                    HL_SP_END_TIME=HL_SP_END_TIME, 
+                    HL_EP_START_TIME=HL_EP_START_TIME, 
+                    HL_EP_END_TIME=HL_EP_END_TIME, 
+                    CHAINING_INFLOW_HR_DIFF_THRESHOLD=CHAINING_INFLOW_HR_DIFF_THRESHOLD,
+                    CHAINING_HR_DIFF_THRESHOLD=CHAINING_HR_DIFF_THRESHOLD,
+                    HL_SP_OUTFLOW_THRESHOLD=HL_SP_OUTFLOW_THRESHOLD,
+                    HL_EP_OUTFLOW_THRESHOLD=HL_EP_OUTFLOW_THRESHOLD,
+                    RANDOMIZED_SIMULTANEOUS_SEARCH_ITERATIONS=RANDOMIZED_SIMULTANEOUS_SEARCH_ITERATIONS,
+                    SIM_THRESH_FOR_NO_MATCH_TRIPS=SIM_THRESH_FOR_NO_MATCH_TRIPS,
+                    GRID_RESOLUTION_JSD=GRID_RESOLUTION_JSD):
+    
     plot_hour_of_day_distribution(raw_full_trip_gdf)
+    plot_distribution_of_number_of_trips_per_user(raw_full_trip_gdf)
+    plot_distribution_of_trip_distances(raw_full_trip_gdf)
+    plot_distribution_of_trip_durations(raw_full_trip_gdf)
 
     # Merge Start Points (SP) and End Points (EP) with Tessellation
     print("\nMatching start and end points with tessellation...")
@@ -1097,11 +1347,11 @@ def run_full_attack(raw_full_trip_gdf, raw_trip_sp_gdf, raw_trip_ep_gdf, tessela
     # Build Home Locations (HL)
     # Build HL from Start Points
     print('\nBuilding HL from start points...')
-    gdf_hl_combined_sp = build_hl_from_start_points(gdf_sp)
+    gdf_hl_combined_sp = build_hl_from_start_points(gdf_sp, gdf_ep, HL_SP_OUTFLOW_THRESHOLD=HL_SP_OUTFLOW_THRESHOLD)
     print('Done.')
     # Build HL from End Points
     print('\nBuilding HL from end points...')
-    gdf_hl_combined_ep = build_hl_from_end_points(gdf_ep)
+    gdf_hl_combined_ep = build_hl_from_end_points(gdf_sp, gdf_ep, HL_EP_OUTFLOW_THRESHOLD=HL_EP_OUTFLOW_THRESHOLD)
     print('Done.')
     # Combine HL from Start Points and End Points
     print('\nCombining HL from start points and end points...')
@@ -1137,7 +1387,7 @@ def run_full_attack(raw_full_trip_gdf, raw_trip_sp_gdf, raw_trip_ep_gdf, tessela
 
     # Try to assign trips without match
     print("\nAssigning trips without match...")
-    clustering_after_double_assign_HL = assign_trips_without_match(
+    clustering_after_assign_no_match = assign_trips_without_match(
         clustering_after_HL, HL_table_dict, 
         full_trips_concat_gdf, 
         full_trips_concat_gdf_overlap_dict, 
@@ -1152,12 +1402,45 @@ def run_full_attack(raw_full_trip_gdf, raw_trip_sp_gdf, raw_trip_ep_gdf, tessela
     print("\nClustering results after HL matching step:")
     print(f"Number of unique clusters: {len(set(list(dict(sorted(clustering_after_HL.items())).values())))}")
     evaluate(list(dict(sorted(clustering_after_HL.items())).values()), full_trip_gdf)
-    print("\nClustering results after double assign HL step:")
-    print(f"Number of unique clusters: {len(set(list(dict(sorted(clustering_after_double_assign_HL.items())).values())))}")
-    evaluate(list(dict(sorted(clustering_after_double_assign_HL.items())).values()), full_trip_gdf)
+    print("\nClustering results after assigning trips without HL match:")
+    print(f"Number of unique clusters: {len(set(list(dict(sorted(clustering_after_assign_no_match.items())).values())))}")
+    evaluate(list(dict(sorted(clustering_after_assign_no_match.items())).values()), full_trip_gdf)
 
-    print("\nStoring results to csv...")
-    store_results(clustering_concat, list(dict(sorted(clustering_after_HL.items())).values()), list(dict(sorted(clustering_after_double_assign_HL.items())).values()), full_trip_gdf)
+
+    # Clustering of clusters
+    # Write trips of clusters to geojson
+    print("\nWriting trips of clusters to geojson...")
+    trip_id_cluster_dict = build_trip_id_clustering_dict(list(dict(sorted(clustering_after_HL.items())).values()), full_trip_gdf)
+    print(trip_id_cluster_dict)
+    write_cluster_geojson(trip_id_cluster_dict, full_trip_gdf)
+    print("Done.")
+
+    # Rasterize trips in clusters
+    print("\nRasterizing trips in clusters...")
+    build_raster_usage_count_tfifs(city=city)
+    print("Done.")
+
+    # Compute JSD cdist matrix for clusters
+    print("\nComputing JSD cdist matrix for clusters...")
+    jsd_cdist_matrix = cdist_jsd()
+    plot_distribution_of_JSD_dist_matrix(jsd_cdist_matrix)
+    print("Done.")
+
+    # Compute hierarchical clustering
+    print("\nComputing hierarchical clustering...")
+    clustering_hca = AgglomerativeClustering(n_clusters=57, metric='precomputed', linkage='average').fit(jsd_cdist_matrix)
+    clustering_hca = build_cluster_of_cluster(clustering_hca.labels_, trip_id_cluster_dict)
+    clustering_ap = AffinityPropagation(random_state=5, affinity='precomputed').fit(jsd_cdist_matrix)
+    clustering_ap = build_cluster_of_cluster(clustering_ap.labels_, trip_id_cluster_dict)
+    print("Done.")
+
+    # Evaluate clustering Results
+    evaluate(clustering_hca, full_trip_gdf)
+    evaluate(clustering_ap, full_trip_gdf)
+
+    print("\nStoring results to csv and delete temp directory...")
+    delete_temp_directory()
+    store_results(clustering_concat, list(dict(sorted(clustering_after_HL.items())).values()), list(dict(sorted(clustering_after_assign_no_match.items())).values()), full_trip_gdf)
     print("Done.")
 
 
