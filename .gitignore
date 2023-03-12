@@ -4,3 +4,5 @@ constrained_clustering/*
 traj-dist/*
 .vscode/*
 __pycache__/*
+freemove/temp/*
+geolife/temp/*
