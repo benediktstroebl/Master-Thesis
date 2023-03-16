@@ -47,8 +47,6 @@ osm_groups = {
     }"""
 }
 
-service_key = open('targomo_service_key.txt').read()
-
 
 def get_group_node_count(group, lat, lng, walk_distance=1000):
   url = "https://api.targomo.com/pointofinterest/reachability"
@@ -89,11 +87,15 @@ def get_group_node_count(group, lat, lng, walk_distance=1000):
   return len(parsed['features'])
 
 def get_geographical_context_vector(lat, lon):
-  vector = []
-  for group in osm_groups:
-    vector.append(get_group_node_count(osm_groups[group], lat, lon))
+    vector = []
+    for group in osm_groups:
+        vector.append(get_group_node_count(osm_groups[group], lat, lon))
 
-  normalized_vector = [round(x / max(vector), 2) for x in vector]
-  return np.asarray(normalized_vector)
+    if sum(vector) == 0: # if counts are all zero
+        return vector
+    else:
+        normalized_vector = [round(x / max(vector), 2) for x in vector]
+        return np.asarray(normalized_vector)
+
 
 # get_geographical_context_vector(52.511720, 13.322269)
