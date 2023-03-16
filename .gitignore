@@ -6,3 +6,11 @@ traj-dist/*
 __pycache__/*
 freemove/temp/*
 geolife/temp/*
+*.tif
+*.pyc
+*.log
+wtest.ipynb
+Autoencoder/.ipynb_checkpoints/*
+Autoencoder/test.ipynb
+freemove/test.ipynb
+utils/test.ipynb
