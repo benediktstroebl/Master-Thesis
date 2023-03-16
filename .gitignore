@@ -9,6 +9,7 @@ geolife/temp/*
 *.tif
 *.pyc
 *.log
+*.csv
 wtest.ipynb
 Autoencoder/.ipynb_checkpoints/*
 Autoencoder/test.ipynb
