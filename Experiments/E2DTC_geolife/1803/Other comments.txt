@@ -1,0 +1,1 @@
+- pretrained model for 50 epochs (I had to restart so that is why pretrain epoch = 0 in parameters screenshot
