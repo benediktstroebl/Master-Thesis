@@ -2,6 +2,7 @@ import pandas as pd
 import geopandas as gp
 from shapely import Point
 import numpy as np
+from datetime import timedelta
 
 def select_n_random_users_from_dataframes(n, raw_full_trip_gdf, raw_trip_sp_gdf, raw_trip_ep_gdf):
     """Select n random users from the dataset.
@@ -18,7 +19,7 @@ def select_n_random_users_from_dataframes(n, raw_full_trip_gdf, raw_trip_sp_gdf,
     return raw_full_trip_gdf, raw_trip_sp_gdf, raw_trip_ep_gdf
 
 
-def load_geolife(n_rand_users=None, n_trajs=None, only_toy_data=False, data_type='raw', min_n_trips_per_user=1, tessellation_diameter=200):
+def load_geolife(n_rand_users=None, n_trajs=None, only_toy_data=False, data_type='raw', min_n_trips_per_user=1, tessellation_diameter=200, rand_n_week_period=False):
     # Load geolife data with EPSG:32650 (China)
     if data_type == 'raw':
         print("Reading splitted geolife geojson file...")
@@ -68,6 +69,18 @@ def load_geolife(n_rand_users=None, n_trajs=None, only_toy_data=False, data_type
     raw_full_trip_gdf['TRIP_WD'] = pd.to_datetime(raw_full_trip_gdf.TRIP_START, format='%Y-%m-%d %H:%M:%S').dt.strftime('%A')
     raw_full_trip_gdf['TRIP_DATE'] = pd.to_datetime(raw_full_trip_gdf.TRIP_START, format='%Y-%m-%d %H:%M:%S').dt.strftime('%Y-%m-%d')
 
+    # Extract random n-week period from the dataset raw_full_trip_gdf
+    if rand_n_week_period is not None:
+        # Get random 4-week period
+        start_date = pd.to_datetime(raw_full_trip_gdf.TRIP_DATE.unique()).min()
+        end_date = pd.to_datetime(raw_full_trip_gdf.TRIP_DATE.unique()).max()
+        days = rand_n_week_period * 7
+        rand_start_date = start_date + timedelta(days=np.random.randint(0, (end_date - start_date).days - days))
+        rand_end_date = rand_start_date + timedelta(days=days)
+        # Filter raw_full_trip_gdf
+        raw_full_trip_gdf = raw_full_trip_gdf[(raw_full_trip_gdf['TRIP_DATE'] >= rand_start_date.strftime('%Y-%m-%d')) & (raw_full_trip_gdf['TRIP_DATE'] <= rand_end_date.strftime('%Y-%m-%d'))]
+
+
     # Calculate trip duration in minutes
     raw_full_trip_gdf['TRIP_DURATION_IN_MINS'] = (pd.to_datetime(raw_full_trip_gdf.TRIP_END, format='%Y-%m-%d %H:%M:%S') - pd.to_datetime(raw_full_trip_gdf.TRIP_START, format='%Y-%m-%d %H:%M:%S')).dt.total_seconds() / 60
 
@@ -90,7 +103,7 @@ def load_geolife(n_rand_users=None, n_trajs=None, only_toy_data=False, data_type
     return geolife_raw_full_trip_gdf, raw_trip_sp_gdf, raw_trip_ep_gdf, geolife_tesselation_gdf
 
 
-def load_freemove(n_rand_users=None, n_trajs=None, hide_test_users=True, data_type='raw', min_n_trips_per_user=1, tessellation_diameter=200):
+def load_freemove(n_rand_users=None, n_trajs=None, hide_test_users=True, data_type='raw', min_n_trips_per_user=1, tessellation_diameter=200, rand_n_week_period=None):
     # read PERSON_IDs from test set
     test_ids = []
     with open("../freemove/test_set_user_ids.txt", "r") as f:
@@ -144,6 +157,17 @@ def load_freemove(n_rand_users=None, n_trajs=None, hide_test_users=True, data_ty
     # Extract weekday and date
     raw_full_trip_gdf['TRIP_WD'] = pd.to_datetime(raw_full_trip_gdf.TRIP_START, format='%Y-%m-%d %H:%M:%S').dt.strftime('%A')
     raw_full_trip_gdf['TRIP_DATE'] = pd.to_datetime(raw_full_trip_gdf.TRIP_START, format='%Y-%m-%d %H:%M:%S').dt.strftime('%Y-%m-%d')
+
+    # Extract random n-week period from the dataset raw_full_trip_gdf
+    if rand_n_week_period is not None:
+        # Get random 4-week period
+        start_date = pd.to_datetime(raw_full_trip_gdf.TRIP_DATE.unique()).min()
+        end_date = pd.to_datetime(raw_full_trip_gdf.TRIP_DATE.unique()).max()
+        days = rand_n_week_period * 7
+        rand_start_date = start_date + timedelta(days=np.random.randint(0, (end_date - start_date).days - days))
+        rand_end_date = rand_start_date + timedelta(days=days)
+        # Filter raw_full_trip_gdf
+        raw_full_trip_gdf = raw_full_trip_gdf[(raw_full_trip_gdf['TRIP_DATE'] >= rand_start_date.strftime('%Y-%m-%d')) & (raw_full_trip_gdf['TRIP_DATE'] <= rand_end_date.strftime('%Y-%m-%d'))]
 
     # Calculate trip duration in minutes
     raw_full_trip_gdf['TRIP_DURATION_IN_MINS'] = (pd.to_datetime(raw_full_trip_gdf.TRIP_END, format='%Y-%m-%d %H:%M:%S') - pd.to_datetime(raw_full_trip_gdf.TRIP_START, format='%Y-%m-%d %H:%M:%S')).dt.total_seconds() / 60
