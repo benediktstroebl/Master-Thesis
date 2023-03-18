@@ -1,0 +1,5 @@
+- We used only 0.95 quantile of trajectories (length)
+- Unsplitted
+- 0.15 test split
+
+Terminal 3
