@@ -19,7 +19,7 @@ def select_n_random_users_from_dataframes(n, raw_full_trip_gdf, raw_trip_sp_gdf,
     return raw_full_trip_gdf, raw_trip_sp_gdf, raw_trip_ep_gdf
 
 
-def load_geolife(n_rand_users=None, n_trajs=None, only_toy_data=False, data_type='raw', min_n_trips_per_user=1, tessellation_diameter=200, rand_n_week_period=False):
+def load_geolife(n_rand_users=None, n_trajs=None, only_toy_data=False, data_type='raw', min_n_trips_per_user=1, tessellation_diameter=200, rand_n_week_period=None):
     # Load geolife data with EPSG:32650 (China)
     if data_type == 'raw':
         print("Reading splitted geolife geojson file...")
