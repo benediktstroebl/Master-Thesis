@@ -1004,8 +1004,9 @@ def getTripOverlaps(gdf):
         for index_y, trip_y in gdf.iterrows():
             ts_y = pd.to_datetime(trip_y['TRIP_START'], format='%Y-%m-%d %H:%M:%S')
             te_y = pd.to_datetime(trip_y['TRIP_END'], format='%Y-%m-%d %H:%M:%S')
-
-            if ts_x <= ts_y and te_x >= ts_y and (trip_x.TRIP_ID != trip_y.TRIP_ID): 
+            
+            # check if trips overlap in time (happen simultaneously) but must not be the same trip
+            if ((ts_x <= ts_y and te_x >= ts_y) or (ts_y <= ts_x and te_y >= ts_x) or (ts_y <= ts_x and te_y >= te_x) or (ts_x <= ts_y and te_x >= te_y)) and (trip_x.TRIP_ID != trip_y.TRIP_ID): 
                 overlaps.append(trip_y['TRIP_ID'])
             else:
                 pass
@@ -1086,7 +1087,7 @@ def build_clustering_after_HL_assignment(HL_table_trips_concat, full_trip_gdf, t
     clustering_after_HL = {}
     HL_table_dict = (HL_table_trips_concat.groupby('HL_ID')
         .apply(lambda x: list(dict(x.TRIP_ID).values()))
-        .to_dict())
+        .to_dict()).copy()
 
     for index, HL in tqdm(enumerate(HL_table_dict), total=len(HL_table_dict)):
         # Skip HL_ID -1, we will assign a clustering ID to these trips later
@@ -1099,12 +1100,12 @@ def build_clustering_after_HL_assignment(HL_table_trips_concat, full_trip_gdf, t
         # assign hl_id -1 to all trips that are not part of the largest subset
         for trip in HL_table_dict[HL]:
             if trip not in non_simultaneous_subset:
+#                 print('Appended ', trip, 'to non match since it is simultaneous')
                 HL_table_dict[-1].append(trip)
 
         # Loop through all trips that are assigned to this HL_ID and assign the same clustering ID to all of them
         for trip in non_simultaneous_subset:
             clustering_after_HL[getIndexInList(trip, full_trip_gdf)] = index
-
             # Check if this trip is a concatenated trip and assign the same clustering ID to all trips that are part of the concatenated trip
             if trip in trip_concat_dict:
                 for t in trip_concat_dict[trip]:
