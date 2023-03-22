@@ -135,8 +135,8 @@ def load_freemove(n_rand_users=None, n_trajs=None, hide_test_users=True, data_ty
     # Load tesselation data
     tesselation_gdf = gp.read_file("../data/freemove/tessellation_freemove_" + str(tessellation_diameter) + ".geojson").to_crs(epsg=3035)
 
-    # Replace traj_id with increasing integer values
-    raw_full_trip_gdf['traj_id'] = range(0, len(raw_full_trip_gdf))
+#     # Replace traj_id with increasing integer values
+#     raw_full_trip_gdf['traj_id'] = range(0, len(raw_full_trip_gdf))
 
     # Create SP and EP columns
     raw_full_trip_gdf['TRIP_SP'] = raw_full_trip_gdf.geometry.apply(lambda x: Point(x.coords[0]))
