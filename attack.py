@@ -142,6 +142,7 @@ def cluster_acc(y_true, y_pred):
     y_pred = np.asarray(y_pred.copy())
 
     y_true = y_true.astype(np.int64)
+    y_pred = y_pred.astype(np.int64)
     assert y_pred.size == y_true.size
 
     cm = confusion_matrix(y_true, y_pred)
@@ -1004,8 +1005,9 @@ def getTripOverlaps(gdf):
         for index_y, trip_y in gdf.iterrows():
             ts_y = pd.to_datetime(trip_y['TRIP_START'], format='%Y-%m-%d %H:%M:%S')
             te_y = pd.to_datetime(trip_y['TRIP_END'], format='%Y-%m-%d %H:%M:%S')
-
-            if ts_x <= ts_y and te_x >= ts_y and (trip_x.TRIP_ID != trip_y.TRIP_ID): 
+            
+            # check if trips overlap in time (happen simultaneously) but must not be the same trip
+            if ((ts_x <= ts_y and te_x >= ts_y) or (ts_y <= ts_x and te_y >= ts_x) or (ts_y <= ts_x and te_y >= te_x) or (ts_x <= ts_y and te_x >= te_y)) and (trip_x.TRIP_ID != trip_y.TRIP_ID): 
                 overlaps.append(trip_y['TRIP_ID'])
             else:
                 pass
@@ -1027,66 +1029,93 @@ def getOverlappingTrips(traj_id_list, full_trips_concat_gdf_overlap_dict):
     overlapping_trips = [item for sublist in [full_trips_concat_gdf_overlap_dict[t] for t in traj_id_list] for item in sublist] # we first get a list of lists and then flatten it
     return overlapping_trips
 
-def findLargestNonSimultaneousSubset(traj_id_list, full_trips_concat_gdf_overlap_dict, RANDOMIZED_SEARCH_THRESHOLD=30, RANDOMIZED_SEARCH_ITERATIONS=RANDOMIZED_SIMULTANEOUS_SEARCH_ITERATIONS):
-    """This function finds the largest subset of trajectories that are not simultaneous. It uses a determinitic algorithm if the length of the trajectory ID list is smaller than a threshold and a randomized algorithm if the length is larger than the given threshold.
+# def findLargestNonSimultaneousSubset(traj_id_list, full_trips_concat_gdf_overlap_dict, RANDOMIZED_SEARCH_THRESHOLD=30, RANDOMIZED_SEARCH_ITERATIONS=RANDOMIZED_SIMULTANEOUS_SEARCH_ITERATIONS):
+#     """This function finds the largest subset of trajectories that are not simultaneous. It uses a determinitic algorithm if the length of the trajectory ID list is smaller than a threshold and a randomized algorithm if the length is larger than the given threshold.
 
-    Args:
-        traj_id_list (list): List of trajectory IDs.
+#     Args:
+#         traj_id_list (list): List of trajectory IDs.
 
-    Returns:
-        list: List of trajectory IDs that are not simultaneous.
-    """
-    len_traj_id_list = len(traj_id_list)
+#     Returns:
+#         list: List of trajectory IDs that are not simultaneous.
+#     """
+#     len_traj_id_list = len(traj_id_list)
 
-    # Deterministic (optimal) algorithm
-    if len_traj_id_list <= RANDOMIZED_SEARCH_THRESHOLD:
-        # We create a list of all possible subsets of the trajectory ID list with decreasing length
-        # We do this iteratively to not overload the memory
-        for i in range(len_traj_id_list):
-            # Create a list of all possible subsets of the trajectory ID list with length len_traj_id_list - i
-            subsets = list(itertools.combinations(traj_id_list, len_traj_id_list - i))
+#     # Deterministic (optimal) algorithm
+#     if len_traj_id_list <= RANDOMIZED_SEARCH_THRESHOLD:
+#         # We create a list of all possible subsets of the trajectory ID list with decreasing length
+#         # We do this iteratively to not overload the memory
+#         for i in range(len_traj_id_list):
+#             # Create a list of all possible subsets of the trajectory ID list with length len_traj_id_list - i
+#             subsets = list(itertools.combinations(traj_id_list, len_traj_id_list - i))
         
-            # Sort the list by length of the subsets
-            subsets.sort(key=len, reverse=True)
+#             # Sort the list by length of the subsets
+#             subsets.sort(key=len, reverse=True)
 
-            # Loop through the list of subsets
-            for subset in subsets:
-                # get all trips that do overlap in time with any of the trips in subset
-                overlapping_trips = getOverlappingTrips(subset, full_trips_concat_gdf_overlap_dict)
+#             # Loop through the list of subsets
+#             for subset in subsets:
+#                 # get all trips that do overlap in time with any of the trips in subset
+#                 overlapping_trips = getOverlappingTrips(subset, full_trips_concat_gdf_overlap_dict)
 
-                # Check if the subset is not simultaneous
-                if all([t not in overlapping_trips for t in subset]):
-                    # If so, return the subset as list
-                    return list(subset)
+#                 # Check if the subset is not simultaneous
+#                 if all([t not in overlapping_trips for t in subset]):
+#                     # If so, return the subset as list
+#                     return list(subset)
 
-    # Randomized algorithm (numeric approximation)
-    else:
-        def randomized_subset_search(traj_id_list):
-            subsets = []
-            candidates = traj_id_list.copy()
-            id = candidates.pop(random.randrange(len(candidates)))
-            subset = [id]
-            while candidates:
-                next = candidates.pop(random.randrange(len(candidates)))
+#     # Randomized algorithm (numeric approximation)
+#     else:
+#         def randomized_subset_search(traj_id_list):
+#             subsets = []
+#             candidates = traj_id_list.copy()
+#             id = candidates.pop(random.randrange(len(candidates)))
+#             subset = [id]
+#             while candidates:
+#                 next = candidates.pop(random.randrange(len(candidates)))
 
-                if all([t not in getOverlappingTrips(subset, full_trips_concat_gdf_overlap_dict) for t in subset]):
-                    subset.append(next)
+#                 if all([t not in getOverlappingTrips(subset, full_trips_concat_gdf_overlap_dict) for t in subset]):
+#                     subset.append(next)
             
-            subsets.append(subset)
-            return max(subsets, key=len)
+#             subsets.append(subset)
+#             return max(subsets, key=len)
         
-        # We run the randomized subset search n times and return the longest subset
-        print(f'Running randomized subset search for {RANDOMIZED_SEARCH_ITERATIONS} iterations with {len(traj_id_list)} trajectories...')
-        result = Parallel(n_jobs=-4, verbose=1)(delayed(randomized_subset_search)(traj_id_list) for _ in range(RANDOMIZED_SEARCH_ITERATIONS))
-        print('Done. Length of longest subset: ', len(max(result, key=len)))
-        return max(result, key=len)
+#         # We run the randomized subset search n times and return the longest subset
+#         print(f'Running randomized subset search for {RANDOMIZED_SEARCH_ITERATIONS} iterations with {len(traj_id_list)} trajectories...')
+#         result = Parallel(n_jobs=-4, verbose=1)(delayed(randomized_subset_search)(traj_id_list) for _ in range(RANDOMIZED_SEARCH_ITERATIONS))
+#         print('Done. Length of longest subset: ', len(max(result, key=len)))
+#         return max(result, key=len)
+
+def get_conflicts_length(trip_id_set, full_trips_concat_gdf_overlap_dict):
+        conflicting_ids = []
+        for tid in trip_id_set:
+            conflicting_ids.append([k for k in trip_id_set if tid in full_trips_concat_gdf_overlap_dict[k]])
+        return len([item for sublist in conflicting_ids for item in sublist])
+    
+def find_nonsim_subset(trip_id_set, full_trips_concat_gdf_overlap_dict):
+#     print('Initial Length', len(trip_id_set))
+    dropped_ids = []
+    while True:
+        # get conflicting ids
+        conflicting_ids = []
+        for tid in trip_id_set:
+            conflicting_ids.append([k for k in trip_id_set if tid in full_trips_concat_gdf_overlap_dict[k]])
+
+        conflict_len = len([item for sublist in conflicting_ids for item in sublist])
+        if conflict_len == 0:
+#             print("Done. Best length: ", len(trip_id_set))
+            break
+        combinations = list(itertools.combinations(trip_id_set, len(trip_id_set)-1))
+        best_combination = np.argmax([conflict_len - get_conflicts_length(t_id_set, full_trips_concat_gdf_overlap_dict) for t_id_set in combinations])
+        for i in trip_id_set:
+            if i not in combinations[best_combination]:
+                dropped_ids.append(i)
+        trip_id_set = combinations[best_combination]
+    return trip_id_set, dropped_ids
 
 def build_clustering_after_HL_assignment(HL_table_trips_concat, full_trip_gdf, trip_concat_dict, full_trips_concat_gdf_overlap_dict):
     # This creates the array with clustering IDs after the HL assignment step
     clustering_after_HL = {}
     HL_table_dict = (HL_table_trips_concat.groupby('HL_ID')
         .apply(lambda x: list(dict(x.TRIP_ID).values()))
-        .to_dict())
+        .to_dict()).copy()
 
     for index, HL in tqdm(enumerate(HL_table_dict), total=len(HL_table_dict)):
         # Skip HL_ID -1, we will assign a clustering ID to these trips later
@@ -1094,21 +1123,21 @@ def build_clustering_after_HL_assignment(HL_table_trips_concat, full_trip_gdf, t
             continue
 
         # find the largest subset of trips that are not simultaneous
-        non_simultaneous_subset = findLargestNonSimultaneousSubset(HL_table_dict[HL], full_trips_concat_gdf_overlap_dict)
+        non_simultaneous_subset, _ = find_nonsim_subset(HL_table_dict[HL], full_trips_concat_gdf_overlap_dict)
 
         # assign hl_id -1 to all trips that are not part of the largest subset
         for trip in HL_table_dict[HL]:
             if trip not in non_simultaneous_subset:
+#                 print('Appended ', trip, 'to non match since it is simultaneous')
                 HL_table_dict[-1].append(trip)
 
-        # Loop through all trips that are assigned to this HL_ID and assign the same clustering ID to all of them
-        for trip in non_simultaneous_subset:
-            clustering_after_HL[getIndexInList(trip, full_trip_gdf)] = index
-
-            # Check if this trip is a concatenated trip and assign the same clustering ID to all trips that are part of the concatenated trip
-            if trip in trip_concat_dict:
-                for t in trip_concat_dict[trip]:
-                    clustering_after_HL[getIndexInList(t, full_trip_gdf)] = index
+            # Loop through all trips that are assigned to this HL_ID and assign the same clustering ID to all of them
+            else:
+                clustering_after_HL[getIndexInList(trip, full_trip_gdf)] = index
+                # Check if this trip is a concatenated trip and assign the same clustering ID to all trips that are part of the concatenated trip
+                if trip in trip_concat_dict:
+                    for t in trip_concat_dict[trip]:
+                        clustering_after_HL[getIndexInList(t, full_trip_gdf)] = index
 
     # Assign clustering IDs to all hl_id -1 trips (these are the trips that were not successfully assigned to any HL_ID)
     for index, unm_trip in enumerate(HL_table_dict[-1]):

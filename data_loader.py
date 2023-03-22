@@ -19,9 +19,12 @@ def select_n_random_users_from_dataframes(n, raw_full_trip_gdf, raw_trip_sp_gdf,
     return raw_full_trip_gdf, raw_trip_sp_gdf, raw_trip_ep_gdf
 
 
-def load_geolife(n_rand_users=None, n_trajs=None, only_toy_data=False, data_type='raw', min_n_trips_per_user=1, tessellation_diameter=200, rand_n_week_period=False):
+def load_geolife(n_rand_users=None, n_trajs=None, only_toy_data=False, data_type='raw', min_n_trips_per_user=1, tessellation_diameter=200, rand_n_week_period=None, min_trip_length=None):
     # Load geolife data with EPSG:32650 (China)
     if data_type == 'raw':
+        print("Reading raw geolife geojson file...")
+        raw_full_trip_gdf = gp.read_file("../data/geolife/geolife_raw.geojson", geometry='geometry', rows=n_trajs)
+    elif data_type == 'splitted':
         print("Reading splitted geolife geojson file...")
         raw_full_trip_gdf = gp.read_file("../data/geolife/geolife_splitted.geojson", geometry='geometry', rows=n_trajs)
     elif data_type == 'smoothed':
@@ -79,6 +82,10 @@ def load_geolife(n_rand_users=None, n_trajs=None, only_toy_data=False, data_type
         rand_end_date = rand_start_date + timedelta(days=days)
         # Filter raw_full_trip_gdf
         raw_full_trip_gdf = raw_full_trip_gdf[(raw_full_trip_gdf['TRIP_DATE'] >= rand_start_date.strftime('%Y-%m-%d')) & (raw_full_trip_gdf['TRIP_DATE'] <= rand_end_date.strftime('%Y-%m-%d'))]
+    
+    # Filter for min trip length if provided
+    if min_trip_length is not None:
+        raw_full_trip_gdf = raw_full_trip_gdf.query('TRIP_LEN_IN_MTRS > @min_trip_length').copy()
 
 
     # Calculate trip duration in minutes
@@ -103,7 +110,7 @@ def load_geolife(n_rand_users=None, n_trajs=None, only_toy_data=False, data_type
     return geolife_raw_full_trip_gdf, raw_trip_sp_gdf, raw_trip_ep_gdf, geolife_tesselation_gdf
 
 
-def load_freemove(n_rand_users=None, n_trajs=None, hide_test_users=True, data_type='raw', min_n_trips_per_user=1, tessellation_diameter=200, rand_n_week_period=None):
+def load_freemove(n_rand_users=None, n_trajs=None, hide_test_users=True, data_type='raw', min_n_trips_per_user=1, tessellation_diameter=200, rand_n_week_period=None, min_trip_length=None):
     # read PERSON_IDs from test set
     test_ids = []
     with open("../freemove/test_set_user_ids.txt", "r") as f:
@@ -168,6 +175,10 @@ def load_freemove(n_rand_users=None, n_trajs=None, hide_test_users=True, data_ty
         rand_end_date = rand_start_date + timedelta(days=days)
         # Filter raw_full_trip_gdf
         raw_full_trip_gdf = raw_full_trip_gdf[(raw_full_trip_gdf['TRIP_DATE'] >= rand_start_date.strftime('%Y-%m-%d')) & (raw_full_trip_gdf['TRIP_DATE'] <= rand_end_date.strftime('%Y-%m-%d'))]
+        
+    # Filter for min trip length if provided
+    if min_trip_length is not None:
+        raw_full_trip_gdf = raw_full_trip_gdf.query('TRIP_LEN_IN_MTRS > @min_trip_length').copy()
 
     # Calculate trip duration in minutes
     raw_full_trip_gdf['TRIP_DURATION_IN_MINS'] = (pd.to_datetime(raw_full_trip_gdf.TRIP_END, format='%Y-%m-%d %H:%M:%S') - pd.to_datetime(raw_full_trip_gdf.TRIP_START, format='%Y-%m-%d %H:%M:%S')).dt.total_seconds() / 60
