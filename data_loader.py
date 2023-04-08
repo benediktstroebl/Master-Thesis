@@ -19,7 +19,7 @@ def select_n_random_users_from_dataframes(n, raw_full_trip_gdf, raw_trip_sp_gdf,
     return raw_full_trip_gdf, raw_trip_sp_gdf, raw_trip_ep_gdf
 
 
-def load_geolife(n_rand_users=None, n_trajs=None, only_toy_data=False, data_type='raw', min_n_trips_per_user=1, tessellation_diameter=200, rand_n_week_period=None, min_trip_length=None, min_nr_points=10):
+def load_geolife(n_rand_users=None, n_trajs=None, only_toy_data=False, data_type='raw', min_n_trips_per_user=1, tessellation_diameter=200, rand_n_week_period=None, min_trip_length=None, min_nr_points=1, only_2008=True):
     # Load geolife data with EPSG:32650 (China)
     if data_type == 'raw':
         print("Reading raw geolife geojson file...")
@@ -40,6 +40,10 @@ def load_geolife(n_rand_users=None, n_trajs=None, only_toy_data=False, data_type
 
     # Replace traj_id with increasing integer values
     raw_full_trip_gdf['traj_id'] = range(0, len(raw_full_trip_gdf))
+
+    # Extract 2008 data
+    if only_2008:
+        raw_full_trip_gdf = raw_full_trip_gdf[pd.to_datetime(raw_full_trip_gdf.start_t, format='%Y-%m-%d %H:%M:%S').dt.year == 2008].copy()
 
     # For debug and testing, we can use these user_ids
     if only_toy_data:
@@ -114,7 +118,7 @@ def load_geolife(n_rand_users=None, n_trajs=None, only_toy_data=False, data_type
     return geolife_raw_full_trip_gdf, raw_trip_sp_gdf, raw_trip_ep_gdf, geolife_tesselation_gdf
 
 
-def load_freemove(n_rand_users=None, n_trajs=None, hide_test_users=True, data_type='raw', min_n_trips_per_user=1, tessellation_diameter=200, rand_n_week_period=None, min_trip_length=None, min_nr_points=10):
+def load_freemove(n_rand_users=None, n_trajs=None, hide_test_users=True, data_type='raw', min_n_trips_per_user=1, tessellation_diameter=200, rand_n_week_period=None, min_trip_length=None, min_nr_points=1):
     # read PERSON_IDs from test set
     test_ids = []
     with open("../freemove/test_set_user_ids.txt", "r") as f:
