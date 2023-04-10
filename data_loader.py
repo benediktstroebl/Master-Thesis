@@ -1,6 +1,6 @@
 import pandas as pd
 import geopandas as gp
-from shapely import Point
+from shapely import Point, LineString
 import numpy as np
 from datetime import timedelta
 
@@ -24,6 +24,9 @@ def load_geolife(n_rand_users=None, n_trajs=None, only_toy_data=False, data_type
     if data_type == 'raw':
         print("Reading raw geolife geojson file...")
         raw_full_trip_gdf = gp.read_file("../data/geolife/geolife_raw.geojson", geometry='geometry', rows=n_trajs)
+    elif data_type == 'private':
+        print("Reading private geolife geojson file...")
+        raw_full_trip_gdf = gp.read_file("../data/geolife/geolife_raw_private.geojson", geometry='geometry', rows=n_trajs)
     elif data_type == 'splitted':
         print("Reading splitted geolife geojson file...")
         raw_full_trip_gdf = gp.read_file("../data/geolife/geolife_splitted.geojson", geometry='geometry', rows=n_trajs)
@@ -54,6 +57,7 @@ def load_geolife(n_rand_users=None, n_trajs=None, only_toy_data=False, data_type
     geolife_tesselation_gdf = gp.read_file("../data/geolife/tessellation_geolife_" + str(tessellation_diameter) + ".geojson", geometry='geometry').to_crs('EPSG:32650')
 
     # Filter for min nr of points in each linestring
+    raw_full_trip_gdf.geometry.fillna(value=LineString(), inplace=True)
     raw_full_trip_gdf['NR_POINTS'] = raw_full_trip_gdf.geometry.apply(lambda x: len(x.coords))
     raw_full_trip_gdf = raw_full_trip_gdf.query('NR_POINTS > @min_nr_points').copy()
     upper_quantile = raw_full_trip_gdf.NR_POINTS.quantile(upper_quantile_nr_points)
@@ -131,6 +135,9 @@ def load_freemove(n_rand_users=None, n_trajs=None, hide_test_users=True, data_ty
     if data_type == 'raw':
         print("Reading raw freemove geojson file...")
         raw_full_trip_gdf = gp.read_file("../data/freemove/freemove_raw.geojson", geometry='geometry', rows=n_trajs)
+    elif data_type == 'private':
+        print("Reading private freemove geojson file...")
+        raw_full_trip_gdf = gp.read_file("../data/freemove/freemove_raw_private.geojson", geometry='geometry', rows=n_trajs)
     elif data_type == 'smoothed':
         print("Reading smoothed freemove geojson file...")
         raw_full_trip_gdf = gp.read_file("../data/freemove/freemove_smooth.geojson", geometry='geometry', rows=n_trajs)
@@ -149,6 +156,7 @@ def load_freemove(n_rand_users=None, n_trajs=None, hide_test_users=True, data_ty
     raw_full_trip_gdf['traj_id'] = range(0, len(raw_full_trip_gdf))
 
     # Filter for min nr of points in each linestring
+    raw_full_trip_gdf.geometry.fillna(value=LineString(), inplace=True)
     raw_full_trip_gdf['NR_POINTS'] = raw_full_trip_gdf.geometry.apply(lambda x: len(x.coords))
     raw_full_trip_gdf = raw_full_trip_gdf.query('NR_POINTS > @min_nr_points').copy()
     upper_quantile = raw_full_trip_gdf.NR_POINTS.quantile(upper_quantile_nr_points)
