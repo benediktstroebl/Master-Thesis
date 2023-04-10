@@ -19,7 +19,7 @@ def select_n_random_users_from_dataframes(n, raw_full_trip_gdf, raw_trip_sp_gdf,
     return raw_full_trip_gdf, raw_trip_sp_gdf, raw_trip_ep_gdf
 
 
-def load_geolife(n_rand_users=None, n_trajs=None, only_toy_data=False, data_type='raw', min_n_trips_per_user=1, tessellation_diameter=200, rand_n_week_period=None, min_trip_length=None, min_nr_points=1, only_2008=True):
+def load_geolife(n_rand_users=None, n_trajs=None, only_toy_data=False, data_type='raw', min_n_trips_per_user=1, tessellation_diameter=200, rand_n_week_period=None, min_trip_length=None, min_nr_points=1, upper_quantile_nr_points=1.0, only_2008=True):
     # Load geolife data with EPSG:32650 (China)
     if data_type == 'raw':
         print("Reading raw geolife geojson file...")
@@ -56,6 +56,8 @@ def load_geolife(n_rand_users=None, n_trajs=None, only_toy_data=False, data_type
     # Filter for min nr of points in each linestring
     raw_full_trip_gdf['NR_POINTS'] = raw_full_trip_gdf.geometry.apply(lambda x: len(x.coords))
     raw_full_trip_gdf = raw_full_trip_gdf.query('NR_POINTS > @min_nr_points').copy()
+    upper_quantile = raw_full_trip_gdf.NR_POINTS.quantile(upper_quantile_nr_points)
+    raw_full_trip_gdf = raw_full_trip_gdf.query('NR_POINTS <= @upper_quantile').copy()
 
     # Create SP and EP columns
     raw_full_trip_gdf['TRIP_SP'] = raw_full_trip_gdf.geometry.apply(lambda x: Point(x.coords[0]))
@@ -118,7 +120,7 @@ def load_geolife(n_rand_users=None, n_trajs=None, only_toy_data=False, data_type
     return geolife_raw_full_trip_gdf, raw_trip_sp_gdf, raw_trip_ep_gdf, geolife_tesselation_gdf
 
 
-def load_freemove(n_rand_users=None, n_trajs=None, hide_test_users=True, data_type='raw', min_n_trips_per_user=1, tessellation_diameter=200, rand_n_week_period=None, min_trip_length=None, min_nr_points=1):
+def load_freemove(n_rand_users=None, n_trajs=None, hide_test_users=True, data_type='raw', min_n_trips_per_user=1, tessellation_diameter=200, rand_n_week_period=None, min_trip_length=None, min_nr_points=1, upper_quantile_nr_points=1.0):
     # read PERSON_IDs from test set
     test_ids = []
     with open("../freemove/test_set_user_ids.txt", "r") as f:
@@ -149,6 +151,8 @@ def load_freemove(n_rand_users=None, n_trajs=None, hide_test_users=True, data_ty
     # Filter for min nr of points in each linestring
     raw_full_trip_gdf['NR_POINTS'] = raw_full_trip_gdf.geometry.apply(lambda x: len(x.coords))
     raw_full_trip_gdf = raw_full_trip_gdf.query('NR_POINTS > @min_nr_points').copy()
+    upper_quantile = raw_full_trip_gdf.NR_POINTS.quantile(upper_quantile_nr_points)
+    raw_full_trip_gdf = raw_full_trip_gdf.query('NR_POINTS <= @upper_quantile').copy()
 
     # Create SP and EP columns
     raw_full_trip_gdf['TRIP_SP'] = raw_full_trip_gdf.geometry.apply(lambda x: Point(x.coords[0]))
