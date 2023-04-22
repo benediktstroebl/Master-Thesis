@@ -19,7 +19,7 @@ def select_n_random_users_from_dataframes(n, raw_full_trip_gdf, raw_trip_sp_gdf,
     return raw_full_trip_gdf, raw_trip_sp_gdf, raw_trip_ep_gdf
 
 
-def load_geolife(n_rand_users=None, n_trajs=None, only_toy_data=False, data_type='raw', min_n_trips_per_user=1, tessellation_diameter=200, rand_n_week_period=None, min_trip_length=None, min_nr_points=1, upper_quantile_length=1.0, only_2008=True):
+def load_geolife(n_rand_users=None, n_trajs=None, only_toy_data=False, data_type='raw', min_n_trips_per_user=1, tessellation_diameter=200, rand_n_week_period=None, min_trip_length=None, min_nr_points=1, upper_quantile_length=1.0, only_2008=True, traj_id='int'):
     # Load geolife data with EPSG:32650 (China)
     if data_type == 'raw':
         print("Reading raw geolife geojson file...")
@@ -41,8 +41,9 @@ def load_geolife(n_rand_users=None, n_trajs=None, only_toy_data=False, data_type
         raw_full_trip_gdf = gp.read_file("../data/geolife/geolife_splitted_smooth_generalized.geojson", geometry='geometry', rows=n_trajs)
     print("Done.")
 
-    # Replace traj_id with increasing integer values
-    raw_full_trip_gdf['traj_id'] = range(0, len(raw_full_trip_gdf))
+    if traj_id != 'original':
+        # Replace traj_id with increasing integer values
+        raw_full_trip_gdf['traj_id'] = range(0, len(raw_full_trip_gdf))
 
     # Extract 2008 data
     if only_2008:
@@ -126,7 +127,7 @@ def load_geolife(n_rand_users=None, n_trajs=None, only_toy_data=False, data_type
     return geolife_raw_full_trip_gdf, raw_trip_sp_gdf, raw_trip_ep_gdf, geolife_tesselation_gdf
 
 
-def load_freemove(n_rand_users=None, n_trajs=None, hide_test_users=True, data_type='raw', min_n_trips_per_user=1, tessellation_diameter=200, rand_n_week_period=None, min_trip_length=None, min_nr_points=1, upper_quantile_length=1.0):
+def load_freemove(n_rand_users=None, n_trajs=None, hide_test_users=True, data_type='raw', min_n_trips_per_user=1, tessellation_diameter=200, rand_n_week_period=None, min_trip_length=None, min_nr_points=1, upper_quantile_length=1.0, traj_id='int'):
     # read PERSON_IDs from test set
     test_ids = []
     with open("../freemove/test_set_user_ids.txt", "r") as f:
@@ -153,9 +154,10 @@ def load_freemove(n_rand_users=None, n_trajs=None, hide_test_users=True, data_ty
 
     # Load tesselation data
     tesselation_gdf = gp.read_file("../data/freemove/tessellation_freemove_" + str(tessellation_diameter) + ".geojson").to_crs(epsg=3035)
-
-    # Replace traj_id with increasing integer values
-    raw_full_trip_gdf['traj_id'] = range(0, len(raw_full_trip_gdf))
+    
+    if traj_id != 'original':
+        # Replace traj_id with increasing integer values
+        raw_full_trip_gdf['traj_id'] = range(0, len(raw_full_trip_gdf))
     
     # Filter for min nr of points in each linestring
     raw_full_trip_gdf.geometry.fillna(value=LineString(), inplace=True)
