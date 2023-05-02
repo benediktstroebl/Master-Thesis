@@ -1,19 +1,26 @@
 <p align="center">
-<b><a href="#Abstract">Abstract</a></b>
+<b><a href="#summary">Summary</a></b>
 |
-<b><a href="#Methodology">Methodology</a></b>
+<b><a href="#aata">Data</a></b>
 |
-<b><a href="#Conclusion">Results and Policy Implications</a></b>
+<b><a href="#attack">Attack</a></b>
 |
-<b><a href="#Disclaimer">Disclaimer</a></b>
+<b><a href="#evaluation">Evaluation</a></b>
+|
+<b><a href="#results-and-policy-implications">Results and Policy Implications</a></b>
+|
+<b><a href="#disclaimer">Disclaimer</a></b>
+|
+<b><a href="#ethics-and-disclosure">Ethics</a></b>
 </p>
 
 
-# Estimating the success of re-identification in GPS trajectory datasets without user identifiers
+# Trajectory-User Linking as an Attack: Implications for User Privacy in Mobility Data
 
-This is the corresponding repository to my Master Thesis **Estimating the success of re-identification in GPS trajectory datasets without user identifiers**. It does not contain any data files due to privacy reasons.
+This is the accompanying repository to my Master's Thesis **Trajectory-User Linking as an Attack: Implications for User Privacy in Mobility Data**, in which I propose an attack
+to reconstruct user identifiers in GPS trajectory datasets with no user-trajectory link. 
 
-## Abstract
+## Summary
 
 With the advent of location-based services, vast amounts of individual-level mobility data are being generated and used for a variety of applications. These data can provide valuable insights for transport planning, urban development, and research. However, they also raise privacy concerns, as the high degree of uniqueness of human mobility traces can enable adversaries to link data back to individuals even without obvious identifiers. In this thesis, I propose a novel attack to reconstruct user identifiers in GPS trajectory datasets with no user-trajectory link. Specifically, I frame the problem of trajectory-user linking as an attack and evaluate the remaining privacy risk for users in such datasets. I also assess the efficacy of truncation as a simple privacy mechanism used in practice, to evaluate whether the protection it offers is sufficient. The findings show that the risk of re-identification is significant even when personal identifiers have been removed, and that simple privacy mechanisms may not be effective in protecting user privacy. This work highlights the need for a more holistic approach to privacy in location-based services and demonstrates the importance of evaluating the privacy risks of data-sharing practices.
 
@@ -56,7 +63,7 @@ An overview of the HL assignment step can be see from this flowchart.
 
 During this procedure I use the Longest Common Subsequence (LCSS) to identifiy similar trajectories. I use a the maximum of the raw and reversed metric as illustrated in the following.
 
-<img src="Figures/lcss.png" width="400px" align="center" />
+<img src="Figures/lcss.png" width="600px" align="center" />
 
 Additionally, during evaluation, I apply a obfuscation technique to the raw data in order to assess the efficacy of this measure against the introduced attack. The following illustration explains the truncation method that is applied.
 
@@ -77,13 +84,7 @@ their paper for the GeoLife dataset with a train-test split of 85% and 15% durin
 
 The steadily decreasing loss curves below show that the model is successful in learning trajectory representations for both datasets, but fails to improve on the initial clustering performance during training. This illustrates, as expected, the limited suitability of this method for clustering users only taking trajectory similarity into account.
 
-**freemove**
-
-<img src="Figures/e2dtc_freemove_curves.png" width="400px" align="center" />
-
-**GeoLife**
-
-<img src="Figures/e2dtc_geolife_curves.png" width="400px" align="center" />
+Figures showing the learning curves on both datasets can be found here for [freemove](Figures/e2dtc_freemove_curves.png) and [GeoLife](Figures/e2dtc_geolife_curves.png).
 
 ## Evaluation
 
@@ -92,20 +93,62 @@ I evaluate the risk of re-identification for individuals by considering a scenar
 spatio-temporal points part of the trajectories produced by a user. In this thesis I set the number of points to four drawing on extant literature.
 An example of this evaluation method is illustrated in the figure below.
 
-<img src="Figures/e2dtc_geolife_curves.png" width="400px" align="center" />
+<img src="Figures/clusteringresultscheme.png" width="600px" align="center" />
 
-## Conclusion
+### Evaluation on Raw Data
 
-In this thesis, I estimate the risk of re-identification for individuals part of GPS trajectory datasets with no user-trajectory link. I do so by developing a new attack methodology to reconstruct user identifiers in mobility micro-data and define the underlying trajectory clustering problem formally. This attack comprises a series of heuristics grounded in assumptions about the daily mobility behavior of urban residents using no outside information other than the spatio-temporal trajectories themselves. Evaluating my approach on two real-world datasets from Berlin and Beijing, I show that four random points are enough to re-identify a significant share of individuals' trajectories. Finally, I assess the efficacy of a widely-used obfuscation technique to protect users' privacy and demonstrate its limited reliability across datasets.
+The figure below shows the performance increments across the three main
+steps of the attack. I observe that there is a monotonous increase in overall cluster-
+ing performance for both datasets. The HL assignment steps seems to result in the biggest increment.
+
+<img src="Figures/learning_curves_attack.png" width="600px" align="center" />
+
+Incremental performance across individual heuristics of attack with
+respect to (A) AMI and (B) ARI.
+
+### Characterization of re-identification risk
+
+Overall, the results suggest that
+users in GPS trajectory datasets where no user identifier is available, are subject
+to a significant risk of re-identification with some individuals being particularly
+vulnerable.
+
+<img src="Figures/userresults.png" width="600px" align="center" />
+
+F-score, precision, and recall across 100 random samples of four points for every user in (A) freemove and (B) GeoLife. Users are sorted by
+ascending F-score. Vertical lines indicate the median, lower, and upper F-score
+quartiles.
+
+### Investigation of characteristics impacting users' vulnerability
+
+<img src="Figures/usercharacteristics_nrp_4.png" width="600px" align="center" />
+
+Mean F-scores given four random points across mobility character-
+istics for users in (A) freemove and (B) GeoLife.
+
+### Evaluation of Obfuscated Data
+
+<img src="Figures/obfuscateddelta.png" width="600px" align="center" />
+
+Median F-scores across users for freemove and GeoLife on raw and
+obfuscated datasets given four points with grid cell sizes 200m and 500m.
+
+You can explore the code for running the re-identification analysis as well as the evaluation via the following files:
+- [**Re-identification analysis**](reident_analysis.ipynb)
+- [**Evaluation**](evaluation.ipynb)
+
+## Results and Policy Implications
+
+I estimate the risk of re-identification for individuals part of GPS trajectory datasets with no user-trajectory link. I do so by developing a new attack methodology to reconstruct user identifiers in mobility micro-data and define the underlying trajectory clustering problem formally. This attack comprises a series of heuristics grounded in assumptions about the daily mobility behavior of urban residents using no outside information other than the spatio-temporal trajectories themselves. Evaluating my approach on two real-world datasets from Berlin and Beijing, I show that four random points are enough to re-identify a significant share of individuals' trajectories. Finally, I assess the efficacy of a widely-used obfuscation technique to protect users' privacy and demonstrate its limited reliability across datasets.
 
 These results raise important concerns about the limited privacy protection achieved with simple mechanisms such as discarding the user identifier. Considering the likely development of more powerful attacks in the future, I am convinced that this work forms an important baseline for mobility privacy research. My findings also highlight the need for a more holistic approach to privacy in location-based services that acknowledges the inherent trade-off between anonymity and utility in data-sharing.
 
-In conclusion, the method proposed in this paper highlights the re-identification risk of GPS trajectory datasets, even in the absence of explicit user identifiers, and calls for further validation on diverse datasets. Moving forward, the challenges associated with unsupervised trajectory linking may benefit from the exploration of advanced solutions, such as deep conditional clustering methods, to deepen our understanding of this critical privacy issue.
+From a policy standpoint, it is important to think about new models of data governance that acknowledge the inherent shortcomings of existing privacy-preserving techniques and account for the elevated relevance of the issue in the near future. One promising approach is to implement user-centric trusted entities that handle the access management and sharing of personal data on a case-by-case basis. This enables users to see who is using their data for what purpose and allows them to revoke access rights if necessary. Convincing examples of such concepts already implemented in practice are the [MyData](https://www.mydata.org/publication/mydata-introduction-to-human-centric-use-of-personal-data/) initiative supported by the Finnish government and the private project [Posmo](https://posmo.coop/about-us/wer-wir-sind) based in Zurich.  
 
 ## Disclaimer
 
 I have used GitHub co-pilot during implementation of the outlined research and relied on it for suggesting code writing comments and plotting. 
 
-## Ethics and disclosure
+## Ethics and Disclosure
 
 Given the potential real-world implications of the analysis, I will revoke public access to this repository after grading. This is due to the possibility that carrying out the described attack on publicly accessible datasets could jeopardize the privacy of the individuals who provided the data.
