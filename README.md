@@ -15,9 +15,10 @@
 </p>
 
 
-# Estimating the success of re-identification in GPS trajectory datasets without user identifiers
+# Trajectory-User Linking as an Attack: Implications for User Privacy in Mobility Data
 
-This is the corresponding repository to my Master Thesis **Estimating the success of re-identification in GPS trajectory datasets without user identifiers**. It does not contain any data files due to privacy reasons.
+This is the accompanying repository to my Master Thesis **Trajectory-User Linking as an Attack: Implications for User Privacy in Mobility Data**, in which I propose an attack
+to reconstruct user identifiers in GPS trajectory datasets with no user-trajectory link. 
 
 ## Abstract
 
