@@ -1,11 +1,17 @@
 <p align="center">
-<b><a href="#Abstract">Abstract</a></b>
+<b><a href="#abstract">Abstract</a></b>
 |
-<b><a href="#Methodology">Methodology</a></b>
+<b><a href="#aata">Data</a></b>
 |
-<b><a href="#Conclusion">Results and Policy Implications</a></b>
+<b><a href="#attack">Attack</a></b>
 |
-<b><a href="#Disclaimer">Disclaimer</a></b>
+<b><a href="#evaluation">Evaluation</a></b>
+|
+<b><a href="#results-and-policy-implications">Results and Policy Implications</a></b>
+|
+<b><a href="#disclaimer">Disclaimer</a></b>
+|
+<b><a href="#ethics-and-disclosure">Ethics</a></b>
 </p>
 
 
@@ -131,18 +137,18 @@ You can explore the code for running the re-identification analysis as well as t
 - [**Re-identification analysis**](reident_analysis.ipynb)
 - [**Evaluation**](evaluation.ipynb)
 
-## Conclusion
+## Results and Policy Implications
 
-In this thesis, I estimate the risk of re-identification for individuals part of GPS trajectory datasets with no user-trajectory link. I do so by developing a new attack methodology to reconstruct user identifiers in mobility micro-data and define the underlying trajectory clustering problem formally. This attack comprises a series of heuristics grounded in assumptions about the daily mobility behavior of urban residents using no outside information other than the spatio-temporal trajectories themselves. Evaluating my approach on two real-world datasets from Berlin and Beijing, I show that four random points are enough to re-identify a significant share of individuals' trajectories. Finally, I assess the efficacy of a widely-used obfuscation technique to protect users' privacy and demonstrate its limited reliability across datasets.
+I estimate the risk of re-identification for individuals part of GPS trajectory datasets with no user-trajectory link. I do so by developing a new attack methodology to reconstruct user identifiers in mobility micro-data and define the underlying trajectory clustering problem formally. This attack comprises a series of heuristics grounded in assumptions about the daily mobility behavior of urban residents using no outside information other than the spatio-temporal trajectories themselves. Evaluating my approach on two real-world datasets from Berlin and Beijing, I show that four random points are enough to re-identify a significant share of individuals' trajectories. Finally, I assess the efficacy of a widely-used obfuscation technique to protect users' privacy and demonstrate its limited reliability across datasets.
 
 These results raise important concerns about the limited privacy protection achieved with simple mechanisms such as discarding the user identifier. Considering the likely development of more powerful attacks in the future, I am convinced that this work forms an important baseline for mobility privacy research. My findings also highlight the need for a more holistic approach to privacy in location-based services that acknowledges the inherent trade-off between anonymity and utility in data-sharing.
 
-In conclusion, the method proposed in this paper highlights the re-identification risk of GPS trajectory datasets, even in the absence of explicit user identifiers, and calls for further validation on diverse datasets. Moving forward, the challenges associated with unsupervised trajectory linking may benefit from the exploration of advanced solutions, such as deep conditional clustering methods, to deepen our understanding of this critical privacy issue.
+From a policy standpoint, it is important to think about new models of data governance that acknowledge the inherent shortcomings of existing privacy-preserving techniques and account for the elevated relevance of the issue in the near future. One promising approach is to implement user-centric trusted entities that handle the access management and sharing of personal data on a case-by-case basis. This enables users to see who is using their data for what purpose and allows them to revoke access rights if necessary. Convincing examples of such concepts already implemented in practice are the [MyData](https://www.mydata.org/publication/mydata-introduction-to-human-centric-use-of-personal-data/) initiative supported by the Finnish government and the private project [Posmo](https://posmo.coop/about-us/wer-wir-sind) based in Zurich.  
 
 ## Disclaimer
 
 I have used GitHub co-pilot during implementation of the outlined research and relied on it for suggesting code writing comments and plotting. 
 
-## Ethics and disclosure
+## Ethics and Disclosure
 
 Given the potential real-world implications of the analysis, I will revoke public access to this repository after grading. This is due to the possibility that carrying out the described attack on publicly accessible datasets could jeopardize the privacy of the individuals who provided the data.
