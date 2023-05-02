@@ -1,5 +1,5 @@
 <p align="center">
-<b><a href="#abstract">Abstract</a></b>
+<b><a href="#summary">Summary</a></b>
 |
 <b><a href="#aata">Data</a></b>
 |
@@ -20,7 +20,7 @@
 This is the accompanying repository to my Master Thesis **Trajectory-User Linking as an Attack: Implications for User Privacy in Mobility Data**, in which I propose an attack
 to reconstruct user identifiers in GPS trajectory datasets with no user-trajectory link. 
 
-## Abstract
+## Summary
 
 With the advent of location-based services, vast amounts of individual-level mobility data are being generated and used for a variety of applications. These data can provide valuable insights for transport planning, urban development, and research. However, they also raise privacy concerns, as the high degree of uniqueness of human mobility traces can enable adversaries to link data back to individuals even without obvious identifiers. In this thesis, I propose a novel attack to reconstruct user identifiers in GPS trajectory datasets with no user-trajectory link. Specifically, I frame the problem of trajectory-user linking as an attack and evaluate the remaining privacy risk for users in such datasets. I also assess the efficacy of truncation as a simple privacy mechanism used in practice, to evaluate whether the protection it offers is sufficient. The findings show that the risk of re-identification is significant even when personal identifiers have been removed, and that simple privacy mechanisms may not be effective in protecting user privacy. This work highlights the need for a more holistic approach to privacy in location-based services and demonstrates the importance of evaluating the privacy risks of data-sharing practices.
 
