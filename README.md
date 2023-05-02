@@ -17,7 +17,7 @@
 
 # Trajectory-User Linking as an Attack: Implications for User Privacy in Mobility Data
 
-This is the accompanying repository to my Master Thesis **Trajectory-User Linking as an Attack: Implications for User Privacy in Mobility Data**, in which I propose an attack
+This is the accompanying repository to my Master's Thesis **Trajectory-User Linking as an Attack: Implications for User Privacy in Mobility Data**, in which I propose an attack
 to reconstruct user identifiers in GPS trajectory datasets with no user-trajectory link. 
 
 ## Summary
