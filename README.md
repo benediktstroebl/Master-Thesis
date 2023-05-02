@@ -56,7 +56,7 @@ An overview of the HL assignment step can be see from this flowchart.
 
 During this procedure I use the Longest Common Subsequence (LCSS) to identifiy similar trajectories. I use a the maximum of the raw and reversed metric as illustrated in the following.
 
-<img src="Figures/lcss.png" width="400px" align="center" />
+<img src="Figures/lcss.png" width="600px" align="center" />
 
 Additionally, during evaluation, I apply a obfuscation technique to the raw data in order to assess the efficacy of this measure against the introduced attack. The following illustration explains the truncation method that is applied.
 
@@ -77,13 +77,7 @@ their paper for the GeoLife dataset with a train-test split of 85% and 15% durin
 
 The steadily decreasing loss curves below show that the model is successful in learning trajectory representations for both datasets, but fails to improve on the initial clustering performance during training. This illustrates, as expected, the limited suitability of this method for clustering users only taking trajectory similarity into account.
 
-**freemove**
-
-<img src="Figures/e2dtc_freemove_curves.png" width="400px" align="center" />
-
-**GeoLife**
-
-<img src="Figures/e2dtc_geolife_curves.png" width="400px" align="center" />
+Figures showing the learning curves on both datasets can be found here for [freemove](Figures/e2dtc_freemove_curves.png) and [GeoLife](Figures/e2dtc_geolife_curves.png).
 
 ## Evaluation
 
@@ -92,7 +86,50 @@ I evaluate the risk of re-identification for individuals by considering a scenar
 spatio-temporal points part of the trajectories produced by a user. In this thesis I set the number of points to four drawing on extant literature.
 An example of this evaluation method is illustrated in the figure below.
 
-<img src="Figures/e2dtc_geolife_curves.png" width="400px" align="center" />
+<img src="Figures/clusteringresultscheme.png" width="600px" align="center" />
+
+### Evaluation on Raw Data
+
+The figure below shows the performance increments across the three main
+steps of the attack. I observe that there is a monotonous increase in overall cluster-
+ing performance for both datasets. The HL assignment steps seems to result in the biggest increment.
+
+<img src="Figures/learning_curves_attack.png" width="600px" align="center" />
+
+Incremental performance across individual heuristics of attack with
+respect to (A) AMI and (B) ARI.
+
+### Characterization of re-identification risk
+
+Overall, the results suggest that
+users in GPS trajectory datasets where no user identifier is available, are subject
+to a significant risk of re-identification with some individuals being particularly
+vulnerable.
+
+<img src="Figures/userresults.png" width="600px" align="center" />
+
+F-score, precision, and recall across 100 random samples of p =
+4 points for every user in (A) freemove and (B) GeoLife. Users are sorted by
+ascending F-score. Vertical lines indicate the median, lower, and upper F-score
+quartiles.
+
+### Investigation of characteristics impacting users' vulnerability
+
+<img src="Figures/usercharacteristics_nrp_4.png" width="600px" align="center" />
+
+Mean F-scores given random points Lp=4 across mobility character-
+istics for users in (A) freemove and (B) GeoLife.
+
+### Evaluation of Obfuscated Data
+
+<img src="Figures/obfuscateddelta.png" width="600px" align="center" />
+
+Median F-scores across users for freemove and GeoLife on raw and
+obfuscated datasets given four points with grid cell sizes 200m and 500m.
+
+You can explore the code for running the re-identification analysis as well as the evaluation via the following files:
+- [**Re-identification analysis**](reident_analysis.ipynb)
+- [**Evaluation**](evaluation.ipynb)
 
 ## Conclusion
 
