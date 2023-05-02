@@ -38,7 +38,7 @@ ing only trajectories outside of the main city areas. This yields a total of 1,1
 trajectories from 74 users and 5,101 trajectories from 73 users for freemove and
 GeoLife, respectively.
 
-<!-- You can explore the code for preprocessing, tessellation generation, descriptives, and loading the filtered data in these files:
+You can explore the code for preprocessing, tessellation generation, descriptives, and loading the filtered data in these files:
 - **Preprocessing**: [freemove](freemove/read_freemove.ipynb), [GeoLife](Geolife/read_geolife.ipynb)
 - **Tessellation Generation**: [Berlin](freemove/generate_tessellation.ipynb), [Beijing](Geolife/generate_tessellation_geolife.ipynb)
 - [Data Loaders](data_loader.py)
@@ -48,9 +48,25 @@ The GeoLife dataset can downloaded via this [link](https://www.microsoft.com/en-
 
 ### Attack
 
-In this work I describe a technique to reconstruct user identifiers in GPS mobility datasets with no trajectory-user link by combining a set of assumptions about the day-to-day mobility patterns of urban residents. These include combining trips that seem to be continuations of one another and identifying potential home locations of individuals. In addition, I leverage the information content of location co-visits to combine initially identified groups of trajectories and refine the cluster assignments.
+In this work I describe a technique to reconstruct user identifiers in GPS mobility datasets with no trajectory-user link by combining a set of assumptions about the day-to-day mobility patterns of urban residents. These include combining trips that seem to be continuations of one another and identifying potential home locations (HLs) of individuals. In addition, I leverage the information content of location co-visits to combine initially identified groups of trajectories and refine the cluster assignments.
+
+An overview of the HL assignment step can be see from this flowchart.
 
 <img src="https://github.com/benediktstroebl/Master-Thesis/blob/main/Figures/flowchart_HL.png" width="800px" align="center" />
+
+During this procedure I use the Longest Common Subsequence (LCSS) to identifiy similar trajectories. I use a the maximum of the raw and reversed metric as illustrated in the following.
+
+<img src="Figures/lcss.png" width="400px" align="center" />
+
+Additionally, during evaluation, I apply a obfuscation technique to the raw data in order to assess the efficacy of this measure against the introduced attack. The following illustration explains the truncation method that is applied.
+
+<img src="Figures/privacymethod.png" width="400px" align="center" />
+
+You can explore the code for running the attack, the individual attack steps, and for obfuscating the data in these files:
+- **Running the attack**: [freemove](freemove/read_freemove.ipynb), [GeoLife](Geolife/read_geolife.ipynb)
+- **Individual methods used during the attack**: [Berlin](freemove/generate_tessellation.ipynb), [Beijing](Geolife/generate_tessellation_geolife.ipynb)
+- [Data Loaders](data_loader.py)
+- **Obfuscation of data**: [freemove](freemove/freemove_descriptives.ipynb), [GeoLife](Geolife/geolife_descriptives.ipynb)
 
 ### Evaluation
 
