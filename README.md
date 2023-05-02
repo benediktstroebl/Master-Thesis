@@ -115,8 +115,7 @@ vulnerable.
 
 <img src="Figures/userresults.png" width="600px" align="center" />
 
-F-score, precision, and recall across 100 random samples of p =
-4 points for every user in (A) freemove and (B) GeoLife. Users are sorted by
+F-score, precision, and recall across 100 random samples of four points for every user in (A) freemove and (B) GeoLife. Users are sorted by
 ascending F-score. Vertical lines indicate the median, lower, and upper F-score
 quartiles.
 
@@ -124,7 +123,7 @@ quartiles.
 
 <img src="Figures/usercharacteristics_nrp_4.png" width="600px" align="center" />
 
-Mean F-scores given random points Lp=4 across mobility character-
+Mean F-scores given four random points across mobility character-
 istics for users in (A) freemove and (B) GeoLife.
 
 ### Evaluation of Obfuscated Data
