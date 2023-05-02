@@ -63,17 +63,49 @@ Additionally, during evaluation, I apply a obfuscation technique to the raw data
 <img src="Figures/privacymethod.png" width="400px" align="center" />
 
 You can explore the code for running the attack, the individual attack steps, and for obfuscating the data in these files:
-- **Running the attack**: [freemove](freemove/read_freemove.ipynb), [GeoLife](Geolife/read_geolife.ipynb)
-- **Individual methods used during the attack**: [Berlin](freemove/generate_tessellation.ipynb), [Beijing](Geolife/generate_tessellation_geolife.ipynb)
-- [Data Loaders](data_loader.py)
-- **Obfuscation of data**: [freemove](freemove/freemove_descriptives.ipynb), [GeoLife](Geolife/geolife_descriptives.ipynb)
+- **Running Concatenation and HL assignment for inital clustering**: [freemove](freemove/attack_freemove.ipynb), [GeoLife](Geolife/attack_geolife.ipynb)
+- **Using TF-IDF Refinement**: [freemove example](Recursive_Search_freemove.ipynb), [GeoLife example](Recursive_Search_geolife.ipynb)
+- **Individual methods used during the attack**: [here](attack.ipynb)
+- **Obfuscation of data**: [freemove](freemove/freemove_create_private_data.ipynb), [GeoLife](Geolife/create_private_data_geolife.ipynb)
 
-### Evaluation
+### Baseline
+
+During evaluation of the overall performance, the outlined attack is compared to the E2DTC deep clustering framework introduced by [(Fang et al., 2021)](https://ieeexplore.ieee.org/document/9458936). Their framework has shown state-of-the-art performance in clustering across three datasets including GeoLife.
+
+I apply the same preprocessing to the data as outlined in the data section and otherwise use the same parameters during training as Fang et al. (2021) outlined in
+their paper for the GeoLife dataset with a train-test split of 85% and 15% during pretraining of the trajectory representations. I am using their implementation that is well-documented in the accompanying repository, you can find [here](https://github.com/ZJU-DAILY/E2DTC). The metric outputs during pretraining and training as well as the parameters and final results can be found here for [freemove](Experiments/E2DTC_freemove/2104) and [GeoLife](Experiments/E2DTC_geolife/2104).
+
+The steadily decreasing loss curves below show that the model is successful in learning trajectory representations for both datasets, but fails to improve on the initial clustering performance during training. This illustrates, as expected, the limited suitability of this method for clustering users only taking trajectory similarity into account.
+
+**freemove**
+
+<img src="Figures/e2dtc_freemove_curves.png" width="400px" align="center" />
+
+**GeoLife**
+
+<img src="Figures/e2dtc_geolife_curves.png" width="400px" align="center" />
+
+## Evaluation
+
+given the trajectory assignments found with my attack,
+I evaluate the risk of re-identification for individuals by considering a scenario in which an attacker is given a set randomly chosen
+spatio-temporal points part of the trajectories produced by a user. In this thesis I set the number of points to four drawing on extant literature.
+An example of this evaluation method is illustrated in the figure below.
+
+<img src="Figures/e2dtc_geolife_curves.png" width="400px" align="center" />
 
 ## Conclusion
 
-for future algorithm development.
+In this thesis, I estimate the risk of re-identification for individuals part of GPS trajectory datasets with no user-trajectory link. I do so by developing a new attack methodology to reconstruct user identifiers in mobility micro-data and define the underlying trajectory clustering problem formally. This attack comprises a series of heuristics grounded in assumptions about the daily mobility behavior of urban residents using no outside information other than the spatio-temporal trajectories themselves. Evaluating my approach on two real-world datasets from Berlin and Beijing, I show that four random points are enough to re-identify a significant share of individuals' trajectories. Finally, I assess the efficacy of a widely-used obfuscation technique to protect users' privacy and demonstrate its limited reliability across datasets.
+
+These results raise important concerns about the limited privacy protection achieved with simple mechanisms such as discarding the user identifier. Considering the likely development of more powerful attacks in the future, I am convinced that this work forms an important baseline for mobility privacy research. My findings also highlight the need for a more holistic approach to privacy in location-based services that acknowledges the inherent trade-off between anonymity and utility in data-sharing.
+
+In conclusion, the method proposed in this paper highlights the re-identification risk of GPS trajectory datasets, even in the absence of explicit user identifiers, and calls for further validation on diverse datasets. Moving forward, the challenges associated with unsupervised trajectory linking may benefit from the exploration of advanced solutions, such as deep conditional clustering methods, to deepen our understanding of this critical privacy issue.
 
 ## Disclaimer
 
 I have used GitHub co-pilot during implementation of the outlined research and relied on it for suggesting code writing comments and plotting. 
+
+## Ethics and disclosure
+
+Given the potential real-world implications of the analysis, I will revoke public access to this repository after grading. This is due to the possibility that carrying out the described attack on publicly accessible datasets could jeopardize the privacy of the individuals who provided the data.
