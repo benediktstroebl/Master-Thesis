@@ -149,6 +149,3 @@ From a policy standpoint, it is important to think about new models of data gove
 
 I have used GitHub co-pilot during implementation of the outlined research and relied on it for suggesting code writing comments and plotting. 
 
-## Ethics and Disclosure
-
-Given the potential real-world implications of the analysis, I will revoke public access to this repository after grading. This is due to the possibility that carrying out the described attack on publicly accessible datasets could jeopardize the privacy of the individuals who provided the data.
